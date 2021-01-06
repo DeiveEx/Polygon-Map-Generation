@@ -18,7 +18,9 @@ public class PolygonMap : MonoBehaviour
 	private List<MapEdge> mapEdges = new List<MapEdge>();
 
 	[Header("Debug")]
-	public int neighboorID;
+	public bool showVoronoi;
+	public bool showDelaunay;
+	public int neighboorID = -1;
 
 	private void Start()
 	{
@@ -178,7 +180,7 @@ public class PolygonMap : MonoBehaviour
 	{
 		float pointSize = 0.01f;
 
-		if(delaunayCenters != null)
+		if(showDelaunay && delaunayCenters != null)
 		{
 			Gizmos.color = Color.red;
 			foreach (var center in delaunayCenters)
@@ -187,7 +189,7 @@ public class PolygonMap : MonoBehaviour
 			}
 		}
 
-		if (voronoiCorners != null)
+		if (showVoronoi && voronoiCorners != null)
 		{
 			Gizmos.color = Color.blue;
 			foreach (var corner in voronoiCorners)
@@ -200,41 +202,62 @@ public class PolygonMap : MonoBehaviour
 		{
 			foreach (var edge in mapEdges)
 			{
-				Gizmos.color = Color.black;
-				Gizmos.DrawLine(edge.d0.position, edge.d1.position);
+				if (showDelaunay)
+				{
+					Gizmos.color = Color.black;
+					Gizmos.DrawLine(edge.d0.position, edge.d1.position);
+				}
 
-				Gizmos.color = Color.white;
-				Gizmos.DrawLine(edge.v0.position, edge.v1.position);
+				if (showVoronoi)
+				{
+					Gizmos.color = Color.white;
+					Gizmos.DrawLine(edge.v0.position, edge.v1.position);
+				}
 			}
 		}
 
 		//Neightbors visualization
-		if(delaunayCenters.Count > 0)
+		if(neighboorID >= 0 && delaunayCenters.Count > 0)
 		{
 			CellCenter c = delaunayCenters[neighboorID];
 
-			Gizmos.color = Color.green;
-			Gizmos.DrawWireSphere(c.position, pointSize * 3);
-
-			Gizmos.color = Color.magenta;
-			for (int i = 0; i < c.neighborCells.Count; i++)
+			if(showVoronoi || showDelaunay)
 			{
-				Gizmos.DrawWireSphere(c.neighborCells[i].position, pointSize * 3);
+				Gizmos.color = Color.green;
+				Gizmos.DrawWireSphere(c.position, pointSize * 3);
 			}
 
-			Gizmos.color = Color.yellow;
-			for (int i = 0; i < c.cellCorners.Count; i++)
+			if (showDelaunay)
 			{
-				Gizmos.DrawWireSphere(c.cellCorners[i].position, pointSize * 2);
+				Gizmos.color = Color.magenta;
+				for (int i = 0; i < c.neighborCells.Count; i++)
+				{
+					Gizmos.DrawWireSphere(c.neighborCells[i].position, pointSize * 3);
+				}
+			}
+
+			if (showVoronoi)
+			{
+				Gizmos.color = Color.yellow;
+				for (int i = 0; i < c.cellCorners.Count; i++)
+				{
+					Gizmos.DrawWireSphere(c.cellCorners[i].position, pointSize * 2);
+				}
 			}
 
 			for (int i = 0; i < c.borderEdges.Count; i++)
 			{
-				Gizmos.color = Color.gray;
-				Gizmos.DrawLine(c.borderEdges[i].d0.position, c.borderEdges[i].d1.position);
+				if (showDelaunay)
+				{
+					Gizmos.color = Color.gray;
+					Gizmos.DrawLine(c.borderEdges[i].d0.position, c.borderEdges[i].d1.position);
+				}
 				
-				Gizmos.color = Color.cyan;
-				Gizmos.DrawLine(c.borderEdges[i].v0.position, c.borderEdges[i].v1.position);
+				if (showVoronoi)
+				{
+					Gizmos.color = Color.cyan;
+					Gizmos.DrawLine(c.borderEdges[i].v0.position, c.borderEdges[i].v1.position);
+				}
 			}
 
 		}
@@ -242,8 +265,8 @@ public class PolygonMap : MonoBehaviour
 
 	private void OnValidate()
 	{
-		if (neighboorID < 0)
-			neighboorID = 0;
+		if (neighboorID < -1)
+			neighboorID = -1;
 
 		if (neighboorID >= polygonCount)
 			neighboorID = polygonCount - 1;
