@@ -6,4 +6,10 @@ public class MapPoint
 {
     public int index;
     public Vector2 position;
+	public bool isBorder;
+	public bool isWater;
+	public bool isOcean;
+	public bool isCoast;
+	public float elevation;
+	public float moisture;
 }

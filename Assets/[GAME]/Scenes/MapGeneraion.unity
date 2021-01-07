@@ -238,9 +238,12 @@ MonoBehaviour:
   polygonCount: 200
   size: {x: 2, y: 2}
   relaxation: 2
+  noiseSize: 0.1
   showVoronoi: 1
-  showDelaunay: 1
-  neighboorID: 50
+  showDelaunay: 0
+  neighboorID: 103
+  showBorder: 0
+  showWater: 1
 --- !u!4 &1554614732
 Transform:
   m_ObjectHideFlags: 0
