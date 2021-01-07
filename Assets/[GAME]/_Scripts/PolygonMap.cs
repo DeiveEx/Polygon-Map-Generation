@@ -6,26 +6,26 @@ using csDelaunay; //The Voronoi Library
 
 public class PolygonMap : MonoBehaviour
 {
-	public bool useSeed;
-	public int seed; //The number of polygons/sites we want
-	public int polygonCount = 200;
-    public Vector2 size;
+	//Properties
+	public bool useCustomSeed;
+	public int seed;
+	[HideInInspector] public int noiseSeed; //Ther perlin noise seed
+	public int variation;
+	public int polygonCount = 200; //The number of polygons/sites we want
+	public Vector2 size;
     public int relaxation = 0;
     public float noiseSize = 1;
 
 	//Graphs. Here are the info necessary to build both the Voronoi Graph than the Delaunay triangulation Graph
-	private List<CellCenter> delaunayCenters = new List<CellCenter>();
-	private List<CellCorner> voronoiCorners = new List<CellCorner>();
-	private List<MapEdge> mapEdges = new List<MapEdge>();
+	public List<CellCenter> delaunayCenters = new List<CellCenter>();
+	public List<CellCorner> voronoiCorners = new List<CellCorner>();
+	public List<MapEdge> mapEdges = new List<MapEdge>();
 
+	//Events
+	public event System.Action onMapGenerated;
+
+	//Constants
 	private const float LAKE_THRESHOLD = 0.3f; //0 to 1. Percentage of how many corners must be water for a cell center to be water too
-
-	[Header("Debug")]
-	public bool showVoronoi;
-	public bool showDelaunay;
-	public int neighboorID = -1;
-	public bool showBorder;
-	public bool showWater;
 
 	private void Start()
 	{
@@ -39,16 +39,22 @@ public class PolygonMap : MonoBehaviour
 		//Clear all map info
 		ResetMapInfo();
 
-		//Set the seed for the random system
-		if (useSeed)
+		if (!useCustomSeed)
 		{
-			Random.InitState(seed);
+			seed = Random.Range(int.MinValue, int.MaxValue);
 		}
+
+		//Set the seed for the random system
+		Random.InitState(seed);
+		noiseSeed = seed / 100000; //We use a second, lower seed for the perlin noise because numbers too big can cause problems
 
 		List<Vector2> points = GenerateRandomPoints();
 		GenerateGraphs(points);
 		AssignElevation();
 		//AssignOceanCoastAndLand();
+
+		//Execute an event saying we finished our generation
+		onMapGenerated?.Invoke();
 	}
 
 	private void ResetMapInfo()
@@ -190,18 +196,16 @@ public class PolygonMap : MonoBehaviour
 	private void AssignElevation()
 	{
 		//Define a local helper function to determine if a corner is a land or not
+		//We use a perlin noise to determine the shape of the island, but anything can be used
 		bool IsLand(Vector2 position)
 		{
-			//We use a perlin noise to determine the shape of the island, but anything can be used
-			float perlinSeed = useSeed ? seed : Random.Range(0, 100000f);
-
 			//Normalize the position to a -1 to 1 value
 			Vector2 normalizedPosition = new Vector2() {
 				x = position.x / size.x,
 				y = position.y / size.y
 			};
 
-			float value = Mathf.PerlinNoise(normalizedPosition.x * noiseSize + perlinSeed, normalizedPosition.y * noiseSize + perlinSeed); //Unity's perlin noise function isn't random, so we need to add a "seed" to offset the values
+			float value = Mathf.PerlinNoise(normalizedPosition.x * noiseSize + noiseSeed, normalizedPosition.y * noiseSize + noiseSeed); //Unity's perlin noise function isn't random, so we need to add a "seed" to offset the values
 			return value > (0.3f + 0.3f * position.magnitude * position.magnitude);
 		}
 
@@ -302,141 +306,6 @@ public class PolygonMap : MonoBehaviour
 			corner.isCoast = numOcean > 0 && numLand > 0;
 			corner.isWater = corner.isBorder || numLand != corner.touchingCells.Count && !corner.isCoast;
 		}
-	}
-	#endregion
-
-	#region Debug
-	private void OnDrawGizmos()
-	{
-		float pointSize = 0.01f;
-
-		//Delaunay triangulation points
-		if(showDelaunay && delaunayCenters != null)
-		{
-			Gizmos.color = Color.red;
-			foreach (var center in delaunayCenters)
-			{
-				Gizmos.DrawWireSphere(center.position, pointSize);
-			}
-		}
-
-		//Voronoi points
-		if (showVoronoi && voronoiCorners != null)
-		{
-			foreach (var corner in voronoiCorners)
-			{
-				Gizmos.color = Color.blue;
-				Gizmos.DrawWireSphere(corner.position, pointSize);
-			}
-		}
-
-		//Edges
-		if (mapEdges != null)
-		{
-			foreach (var edge in mapEdges)
-			{
-				if (showDelaunay)
-				{
-					Gizmos.color = Color.black;
-					Gizmos.DrawLine(edge.d0.position, edge.d1.position);
-				}
-
-				if (showVoronoi)
-				{
-					Gizmos.color = Color.white;
-					Gizmos.DrawLine(edge.v0.position, edge.v1.position);
-				}
-			}
-		}
-
-		//Neightbors visualization
-		if(neighboorID >= 0 && delaunayCenters.Count > 0)
-		{
-			CellCenter c = delaunayCenters[neighboorID];
-
-			if(showVoronoi || showDelaunay)
-			{
-				Gizmos.color = Color.green;
-				Gizmos.DrawWireSphere(c.position, pointSize * 3);
-			}
-
-			if (showDelaunay)
-			{
-				Gizmos.color = Color.magenta;
-				for (int i = 0; i < c.neighborCells.Count; i++)
-				{
-					Gizmos.DrawWireSphere(c.neighborCells[i].position, pointSize * 3);
-				}
-			}
-
-			if (showVoronoi)
-			{
-				Gizmos.color = Color.yellow;
-				for (int i = 0; i < c.cellCorners.Count; i++)
-				{
-					Gizmos.DrawWireSphere(c.cellCorners[i].position, pointSize * 2);
-				}
-			}
-
-			for (int i = 0; i < c.borderEdges.Count; i++)
-			{
-				if (showDelaunay)
-				{
-					Gizmos.color = Color.gray;
-					Gizmos.DrawLine(c.borderEdges[i].d0.position, c.borderEdges[i].d1.position);
-				}
-				
-				if (showVoronoi)
-				{
-					Gizmos.color = Color.cyan;
-					Gizmos.DrawLine(c.borderEdges[i].v0.position, c.borderEdges[i].v1.position);
-				}
-			}
-		}
-
-		//Borders
-		if(showBorder && voronoiCorners != null)
-		{
-			foreach (var corner in voronoiCorners)
-			{
-				if (corner.isBorder)
-				{
-					Gizmos.color = Color.red;
-					Gizmos.DrawCube(corner.position, Vector3.one * pointSize * 5);
-				}
-			}
-		}
-
-		//Water
-		if (showWater && voronoiCorners != null && delaunayCenters != null)
-		{
-			Gizmos.color = Color.blue;
-
-			foreach (var corner in voronoiCorners)
-			{
-				if (corner.isWater)
-				{
-					Gizmos.DrawSphere(corner.position, pointSize * 5);
-				}
-			}
-
-			foreach (var cell in delaunayCenters)
-			{
-				if (cell.isWater)
-				{
-					Gizmos.DrawCube(cell.position, Vector3.one * pointSize * 5);
-				}
-			}
-		}
-	}
-
-	private void OnValidate()
-	{
-		if (neighboorID < -1)
-			neighboorID = -1;
-
-		if (neighboorID >= polygonCount)
-			neighboorID = polygonCount - 1;
 	}
 	#endregion
 }
