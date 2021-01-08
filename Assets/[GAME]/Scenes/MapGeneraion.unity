@@ -132,7 +132,6 @@ GameObject:
   - component: {fileID: 364495158}
   - component: {fileID: 364495160}
   - component: {fileID: 364495159}
-  - component: {fileID: 364495161}
   m_Layer: 5
   m_Name: Preview
   m_TagString: Untagged
@@ -196,27 +195,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 364495157}
   m_CullTransparentMesh: 0
---- !u!114 &364495161
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 364495157}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b1ad8c1bc74e61343b26a7b3b96c06d9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  generator: {fileID: 1554614731}
-  rend: {fileID: 364495159}
-  resolution: {x: 1024, y: 1024}
-  mode: 1
-  showVoronoi: 1
-  showDelaunay: 1
-  neighboorID: -1
-  showBorder: 1
-  showWater: 1
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0
@@ -310,6 +288,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1554614732}
   - component: {fileID: 1554614731}
+  - component: {fileID: 1554614733}
   m_Layer: 0
   m_Name: MapGenerator
   m_TagString: Untagged
@@ -330,13 +309,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   useCustomSeed: 0
-  seed: 1829363766
-  noiseSeed: 18293
+  seed: 0
+  noiseSeed: -10428
   variation: 0
-  polygonCount: 200
+  polygonCount: 50
   size: {x: 2, y: 2}
   relaxation: 2
-  noiseSize: 0.1
+  noiseSize: 3
+  borderSize: 1
 --- !u!4 &1554614732
 Transform:
   m_ObjectHideFlags: 0
@@ -351,6 +331,27 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 1
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1554614733
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1554614730}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b1ad8c1bc74e61343b26a7b3b96c06d9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  generator: {fileID: 1554614731}
+  rend: {fileID: 364495159}
+  resolution: {x: 512, y: 512}
+  mode: 0
+  showVoronoi: 0
+  showDelaunay: 0
+  neighboorID: 49
+  showBorder: 1
+  showWater: 1
 --- !u!1 &1743969025
 GameObject:
   m_ObjectHideFlags: 0

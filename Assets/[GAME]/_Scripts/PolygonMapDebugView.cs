@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
-using System.Linq;
+using NaughtyAttributes;
 
 public class PolygonMapDebugView : MonoBehaviour
 {
@@ -43,6 +43,7 @@ public class PolygonMapDebugView : MonoBehaviour
 	}
 
 	#region Generations
+	[Button]
 	private void GenerateDebugTexture()
 	{
 		if (rend == null || generator == null)
@@ -72,7 +73,57 @@ public class PolygonMapDebugView : MonoBehaviour
 
 	private void DrawMap()
 	{
-		
+		if (showVoronoi)
+		{
+			//Generate random colors for each cell
+			Color[] cellColors = new Color[generator.delaunayCenters.Count];
+
+			for (int i = 0; i < cellColors.Length; i++)
+			{
+				cellColors[i] = Random.ColorHSV();
+				cellColors[i].a = 1;
+			}
+
+			//Paint the cells
+			for (int x = 0; x < resolution.x; x++)
+			{
+				for (int y = 0; y < resolution.y; y++)
+				{
+					Vector2 pos = MapTextureCoordToGraphCoords(x, y);
+					CellCenter c = GetClosestCenterFromPoint(pos);
+
+					if (c != null)
+					{
+						colors[x, y] = cellColors[c.index];
+					}
+				}
+			}
+
+			return;
+		}
+
+		if (showWater)
+		{
+			Color water = Color.blue;
+			Color land = new Color(.8f, .8f, .5f);
+
+			//Paint the cells
+			for (int x = 0; x < resolution.x; x++)
+			{
+				for (int y = 0; y < resolution.y; y++)
+				{
+					Vector2 pos = MapTextureCoordToGraphCoords(x, y);
+					CellCenter c = GetClosestCenterFromPoint(pos);
+
+					if (c != null)
+					{
+						colors[x, y] = c.isWater ? water : land;
+					}
+				}
+			}
+
+			return;
+		}
 	}
 
 	private void DrawGraphs()
@@ -87,15 +138,15 @@ public class PolygonMapDebugView : MonoBehaviour
 				if (showDelaunay)
 				{
 
-					Vector2Int pos0 = RemapPositionsToTexture(edge.d0.position.x, edge.d0.position.y);
-					Vector2Int pos1 = RemapPositionsToTexture(edge.d1.position.x, edge.d1.position.y);
+					Vector2Int pos0 = MapGraphCoordToTextureCoords(edge.d0.position.x, edge.d0.position.y);
+					Vector2Int pos1 = MapGraphCoordToTextureCoords(edge.d1.position.x, edge.d1.position.y);
 					DrawLine(pos0.x, pos0.y, pos1.x, pos1.y, 1, Color.black);
 				}
 
 				if (showVoronoi)
 				{
-					Vector2Int pos0 = RemapPositionsToTexture(edge.v0.position.x, edge.v0.position.y);
-					Vector2Int pos1 = RemapPositionsToTexture(edge.v1.position.x, edge.v1.position.y);
+					Vector2Int pos0 = MapGraphCoordToTextureCoords(edge.v0.position.x, edge.v0.position.y);
+					Vector2Int pos1 = MapGraphCoordToTextureCoords(edge.v1.position.x, edge.v1.position.y);
 					DrawLine(pos0.x, pos0.y, pos1.x, pos1.y, 1, Color.white);
 				}
 			}
@@ -106,7 +157,7 @@ public class PolygonMapDebugView : MonoBehaviour
 		{
 			foreach (var center in generator.delaunayCenters)
 			{
-				Vector2Int pos = RemapPositionsToTexture(center.position.x, center.position.y);
+				Vector2Int pos = MapGraphCoordToTextureCoords(center.position.x, center.position.y);
 				DrawCircle(pos.x, pos.y, pointSize, Color.red);
 			}
 		}
@@ -116,7 +167,7 @@ public class PolygonMapDebugView : MonoBehaviour
 		{
 			foreach (var corner in generator.voronoiCorners)
 			{
-				Vector2Int pos = RemapPositionsToTexture(corner.position.x, corner.position.y);
+				Vector2Int pos = MapGraphCoordToTextureCoords(corner.position.x, corner.position.y);
 				DrawCircle(pos.x, pos.y, pointSize, Color.blue);
 			}
 		}
@@ -128,7 +179,7 @@ public class PolygonMapDebugView : MonoBehaviour
 
 			if (showVoronoi || showDelaunay)
 			{
-				Vector2Int pos = RemapPositionsToTexture(c.position.x, c.position.y);
+				Vector2Int pos = MapGraphCoordToTextureCoords(c.position.x, c.position.y);
 				DrawWireCircle(pos.x, pos.y, pointSize * 3, 2, Color.green);
 			}
 
@@ -136,7 +187,7 @@ public class PolygonMapDebugView : MonoBehaviour
 			{
 				for (int i = 0; i < c.neighborCells.Count; i++)
 				{
-					Vector2Int pos = RemapPositionsToTexture(c.neighborCells[i].position.x, c.neighborCells[i].position.y);
+					Vector2Int pos = MapGraphCoordToTextureCoords(c.neighborCells[i].position.x, c.neighborCells[i].position.y);
 					DrawWireCircle(pos.x, pos.y, pointSize * 2, 2, Color.magenta);
 				}
 			}
@@ -145,7 +196,7 @@ public class PolygonMapDebugView : MonoBehaviour
 			{
 				for (int i = 0; i < c.cellCorners.Count; i++)
 				{
-					Vector2Int pos = RemapPositionsToTexture(c.cellCorners[i].position.x, c.cellCorners[i].position.y);
+					Vector2Int pos = MapGraphCoordToTextureCoords(c.cellCorners[i].position.x, c.cellCorners[i].position.y);
 					DrawWireCircle(pos.x, pos.y, pointSize * 2, 2, Color.yellow);
 				}
 			}
@@ -154,15 +205,15 @@ public class PolygonMapDebugView : MonoBehaviour
 			{
 				if (showDelaunay)
 				{
-					Vector2Int pos0 = RemapPositionsToTexture(c.borderEdges[i].d0.position.x, c.borderEdges[i].d0.position.y);
-					Vector2Int pos1 = RemapPositionsToTexture(c.borderEdges[i].d1.position.x, c.borderEdges[i].d1.position.y);
+					Vector2Int pos0 = MapGraphCoordToTextureCoords(c.borderEdges[i].d0.position.x, c.borderEdges[i].d0.position.y);
+					Vector2Int pos1 = MapGraphCoordToTextureCoords(c.borderEdges[i].d1.position.x, c.borderEdges[i].d1.position.y);
 					DrawLine(pos0.x, pos0.y, pos1.x, pos1.y, 1, new Color(0, .5f, .5f));
 				}
 
 				if (showVoronoi)
 				{
-					Vector2Int pos0 = RemapPositionsToTexture(c.borderEdges[i].v0.position.x, c.borderEdges[i].v0.position.y);
-					Vector2Int pos1 = RemapPositionsToTexture(c.borderEdges[i].v1.position.x, c.borderEdges[i].v1.position.y);
+					Vector2Int pos0 = MapGraphCoordToTextureCoords(c.borderEdges[i].v0.position.x, c.borderEdges[i].v0.position.y);
+					Vector2Int pos1 = MapGraphCoordToTextureCoords(c.borderEdges[i].v1.position.x, c.borderEdges[i].v1.position.y);
 					DrawLine(pos0.x, pos0.y, pos1.x, pos1.y, 1, Color.cyan);
 				}
 			}
@@ -175,8 +226,17 @@ public class PolygonMapDebugView : MonoBehaviour
 			{
 				if (corner.isBorder)
 				{
-					Vector2Int pos = RemapPositionsToTexture(corner.position.x, corner.position.y);
+					Vector2Int pos = MapGraphCoordToTextureCoords(corner.position.x, corner.position.y);
 					DrawSquare(pos.x, pos.y, pointSize * 2, Color.red);
+				}
+			}
+
+			foreach (var center in generator.delaunayCenters)
+			{
+				if (center.isBorder)
+				{
+					Vector2Int pos = MapGraphCoordToTextureCoords(center.position.x, center.position.y);
+					DrawWireSquare(pos.x, pos.y, pointSize * 2, 2, Color.red);
 				}
 			}
 		}
@@ -188,7 +248,7 @@ public class PolygonMapDebugView : MonoBehaviour
 			{
 				if (corner.isWater)
 				{
-					Vector2Int pos = RemapPositionsToTexture(corner.position.x, corner.position.y);
+					Vector2Int pos = MapGraphCoordToTextureCoords(corner.position.x, corner.position.y);
 					DrawSquare(pos.x, pos.y, pointSize * 2, Color.blue);
 				}
 			}
@@ -197,8 +257,8 @@ public class PolygonMapDebugView : MonoBehaviour
 			{
 				if (cell.isWater)
 				{
-					Vector2Int pos = RemapPositionsToTexture(cell.position.x, cell.position.y);
-					DrawSquare(pos.x, pos.y, pointSize * 2, Color.blue);
+					Vector2Int pos = MapGraphCoordToTextureCoords(cell.position.x, cell.position.y);
+					DrawWireCircle(pos.x, pos.y, pointSize * 2, 2, Color.blue);
 				}
 			}
 		}
@@ -210,23 +270,26 @@ public class PolygonMapDebugView : MonoBehaviour
 		{
 			for (int y = 0; y < resolution.y; y++)
 			{
-				float value = Mathf.PerlinNoise(x * generator.noiseSize + generator.noiseSeed, y * generator.noiseSize + generator.noiseSeed);
-				colors[x, y] = new Color(value, value, value, 1);
+				Vector2 normalizedPos = new Vector2() {
+					x = ((x / (float)resolution.x) - 0.5f) * 2,
+					y = ((y / (float)resolution.y) - 0.5f) * 2
+				};
+
+				Vector2 perlinPos = new Vector2() {
+					x = (normalizedPos.x * 0.5f + 0.5f) * generator.size.x,
+					y = (normalizedPos.y * 0.5f + 0.5f) * generator.size.y
+				};
+
+				float value = Mathf.PerlinNoise(perlinPos.x * generator.noiseSize + generator.noiseSeed, perlinPos.y * generator.noiseSize + generator.noiseSeed);
+				float value2 = Mathf.Pow(normalizedPos.magnitude, generator.borderSize);
+
+				colors[x, y] = value > value2 ? Color.white : Color.black;
 			}
 		}
 	}
 	#endregion
 
 	#region Helper Functions
-	private Vector2Int RemapPositionsToTexture(float x, float y)
-	{
-		Vector2Int pos = new Vector2Int() {
-			x = (int)(x / generator.size.x * resolution.x),
-			y = (int)(y / generator.size.y * resolution.y)
-		};
-
-		return pos;
-	}
 
 	private void ApplyChangesToTexture()
 	{
@@ -246,6 +309,25 @@ public class PolygonMapDebugView : MonoBehaviour
 		tex.SetPixels(finalColors);
 		tex.Apply();
 		rend.sprite = Sprite.Create(tex, new Rect(0, 0, resolution.x, resolution.y), Vector2.one * 0.5f, 100, 0, SpriteMeshType.FullRect);
+	}
+	private Vector2Int MapGraphCoordToTextureCoords(float x, float y)
+	{
+		Vector2Int pos = new Vector2Int() {
+			x = (int)(x / generator.size.x * resolution.x),
+			y = (int)(y / generator.size.y * resolution.y)
+		};
+
+		return pos;
+	}
+
+	private Vector2 MapTextureCoordToGraphCoords(int x, int y)
+	{
+		Vector2 pos = new Vector2() {
+			x = (x / (float)resolution.x) * generator.size.x,
+			y = (y / (float)resolution.y) * generator.size.y
+		};
+
+		return pos;
 	}
 
 	private void DrawSquare(int x, int y, int size, Color c)
@@ -346,19 +428,22 @@ public class PolygonMapDebugView : MonoBehaviour
 		DrawCircle(x1, y1, thickness, c);
 	}
 
-	private bool PolygonContainsPoint(Vector2[] polyPoints, Vector2 p)
+	private CellCenter GetClosestCenterFromPoint(Vector2 point)
 	{
-		var j = polyPoints.Length - 1;
-		var inside = false;
-		for (int i = 0; i < polyPoints.Length; j = i++)
+		float smallestDistance = float.MaxValue;
+		CellCenter c = null;
+
+		foreach (var center in generator.delaunayCenters)
 		{
-			var pi = polyPoints[i];
-			var pj = polyPoints[j];
-			if (((pi.y <= p.y && p.y < pj.y) || (pj.y <= p.y && p.y < pi.y)) &&
-				(p.x < (pj.x - pi.x) * (p.y - pi.y) / (pj.y - pi.y) + pi.x))
-				inside = !inside;
+			float d = Vector2.Distance(point, center.position);
+			if (d < smallestDistance)
+			{
+				smallestDistance = d;
+				c = center;
+			}
 		}
-		return inside;
+
+		return c;
 	}
 	#endregion
 
@@ -372,8 +457,5 @@ public class PolygonMapDebugView : MonoBehaviour
 
 		if (neighboorID >= generator.polygonCount)
 			neighboorID = generator.polygonCount - 1;
-
-		if(Application.isPlaying)
-			GenerateDebugTexture();
 	}
 }
