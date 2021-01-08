@@ -14,8 +14,9 @@ public class PolygonMapDebugView : MonoBehaviour
 	}
 
     public PolygonMap generator;
-	public Image rend;
+	public RawImage rend;
 	public Vector2Int resolution = new Vector2Int(512, 512);
+	public ComputeShader computeShader;
 	[Header("Options")]
 	public ViewModes mode;
 	public bool showVoronoi;
@@ -25,6 +26,32 @@ public class PolygonMapDebugView : MonoBehaviour
 	public bool showWater;
 
 	private Color[,] colors;
+	private RenderTexture rt;
+	private ComputeBuffer shaderBuffer;
+	private int buildTextureKernelIndex;
+	private ColorData[] colorData;
+
+	private struct ColorData
+	{
+		public Vector2Int position;
+		public Color color;
+	}
+
+	private void Awake()
+	{
+		//Create a render texture and enable random write so we can rend things to it
+		rt = new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.ARGB32);
+		rt.enableRandomWrite = true;
+		rt.Create();
+
+		//Set the texture for the renderer
+		rend.texture = rt;
+
+		//Set the texture for the shader
+		buildTextureKernelIndex = computeShader.FindKernel("CSMain");
+
+		computeShader.SetTexture(buildTextureKernelIndex, "_Result", rt);
+	}
 
 	private void OnEnable()
 	{
@@ -40,6 +67,9 @@ public class PolygonMapDebugView : MonoBehaviour
 		{
 			generator.onMapGenerated -= GenerateDebugTexture;
 		}
+
+		shaderBuffer?.Dispose();
+		rt?.Release();
 	}
 
 	#region Generations
@@ -68,7 +98,7 @@ public class PolygonMapDebugView : MonoBehaviour
 		}
 
 		//Create the texture and assign the texture
-		ApplyChangesToTexture();
+		//ApplyChangesToTexture();
 	}
 
 	private void DrawMap()
@@ -293,22 +323,45 @@ public class PolygonMapDebugView : MonoBehaviour
 
 	private void ApplyChangesToTexture()
 	{
-		Texture2D tex = new Texture2D(resolution.x, resolution.y);
-		tex.filterMode = FilterMode.Point;
+		//Create a new Buffer
+		shaderBuffer?.Dispose();
+		shaderBuffer = new ComputeBuffer(resolution.x * resolution.y, sizeof(float) * 4 + sizeof(int) * 2); //4 because a color has 4 channels, 2 because the position has X and Y
+		colorData = new ColorData[resolution.x * resolution.y];
 
-		Color[] finalColors = new Color[resolution.x * resolution.y];
-
-		for (int i = 0; i < resolution.x; i++)
+		for (int x = 0; x < resolution.x; x++)
 		{
-			for (int j = 0; j < resolution.y; j++)
+			for (int y = 0; y < resolution.y; y++)
 			{
-				finalColors[i + j * resolution.y] = colors[i, j];
+				ColorData data = new ColorData() {
+					position = new Vector2Int(x, y),
+					color = colors[x, y]
+				};
+
+				colorData[x + y * resolution.y] = data;
 			}
 		}
 
-		tex.SetPixels(finalColors);
-		tex.Apply();
-		rend.sprite = Sprite.Create(tex, new Rect(0, 0, resolution.x, resolution.y), Vector2.one * 0.5f, 100, 0, SpriteMeshType.FullRect);
+		shaderBuffer.SetData(colorData);
+		computeShader.SetBuffer(buildTextureKernelIndex, "_ColorData", shaderBuffer);
+		computeShader.SetInt("_ColorsAmount", resolution.x * resolution.y);
+		computeShader.SetInt("_Resolution", resolution.x );
+		computeShader.Dispatch(buildTextureKernelIndex, resolution.x / 8, resolution.y / 8, 1);
+
+		//Texture2D tex = new Texture2D(resolution.x, resolution.y);
+		//tex.filterMode = FilterMode.Point;
+
+		//Color[] finalColors = new Color[resolution.x * resolution.y];
+
+		//for (int i = 0; i < resolution.x; i++)
+		//{
+		//	for (int j = 0; j < resolution.y; j++)
+		//	{
+		//		finalColors[i + j * resolution.y] = colors[i, j];
+		//	}
+		//}
+
+		//tex.SetPixels(finalColors);
+		//tex.Apply();
 	}
 	private Vector2Int MapGraphCoordToTextureCoords(float x, float y)
 	{

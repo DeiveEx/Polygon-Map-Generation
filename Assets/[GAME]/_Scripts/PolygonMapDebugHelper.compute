@@ -1,0 +1,19 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+
+struct ColorData
+{
+	int2 position;
+	float4 color;
+};
+
+RWTexture2D<float4> _Result; //The texture we're writing to
+StructuredBuffer<ColorData> _ColorData; //the colors we want to write
+int _ColorsAmount, _Resolution;
+
+[numthreads(8,8,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+	//Set the color of the pixel
+	_Result[id.xy] = _ColorData[id.x + id.y * _Resolution].color; 
+}
