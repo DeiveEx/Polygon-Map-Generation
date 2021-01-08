@@ -39,6 +39,12 @@ public class PolygonMap : MonoBehaviour
 	[Button]
 	public void Generate()
 	{
+		if (!Application.isPlaying)
+		{
+			Debug.LogWarning("Only Available in Play Mode");
+			return;
+		}
+
 		//Clear all map info
 		ResetMapInfo();
 

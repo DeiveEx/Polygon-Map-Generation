@@ -1,5 +1,6 @@
 ﻿// Each #kernel tells which function to compile; you can have many kernels
-#pragma kernel CSMain
+#pragma kernel GenerateTexture
+#pragma kernel FindClosestCell
 
 struct ColorData
 {
@@ -9,11 +10,41 @@ struct ColorData
 
 RWTexture2D<float4> _Result; //The texture we're writing to
 StructuredBuffer<ColorData> _ColorData; //the colors we want to write
-int _ColorsAmount, _Resolution;
+int _Resolution;
 
 [numthreads(8,8,1)]
-void CSMain (uint3 id : SV_DispatchThreadID)
+void GenerateTexture (uint3 id : SV_DispatchThreadID)
 {
 	//Set the color of the pixel
 	_Result[id.xy] = _ColorData[id.x + id.y * _Resolution].color; 
+}
+
+
+struct CellData
+{
+	int2 position;
+};
+
+StructuredBuffer<CellData> _CellData; //The positions of the voronoi cells
+RWStructuredBuffer<int> _CellIDByPixel;
+
+[numthreads(8,8,1)]
+void FindClosestCell (uint3 id : SV_DispatchThreadID)
+{
+	int index = 0;
+	float currentDistance;
+	float minDistance = 100000.0f;
+
+	for (int i = 0; i < _CellData.Length; i++)
+	{
+		currentDistance = distance(_CellData[i].position, id.xy);
+
+		if(currentDistance < minDistance)
+		{
+			index = i;
+			minDistance = currentDistance;
+		}
+	}
+
+	_CellIDByPixel[id.x + id.y * _Resolution] = index;
 }

@@ -307,9 +307,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   useCustomSeed: 0
   seed: 0
-  noiseSeed: -10428
+  noiseSeed: -18851
   variation: 0
-  polygonCount: 200
+  polygonCount: 50
   size: {x: 2, y: 2}
   relaxation: 2
   noiseSize: 3
@@ -344,12 +344,8 @@ MonoBehaviour:
   rend: {fileID: 364495159}
   resolution: {x: 512, y: 512}
   computeShader: {fileID: 7200000, guid: 167bf3617b41b45429f09e053486f894, type: 3}
-  mode: 1
-  showVoronoi: 0
-  showDelaunay: 0
+  mode: 64
   neighboorID: 9
-  showBorder: 1
-  showWater: 1
 --- !u!1 &1743969025
 GameObject:
   m_ObjectHideFlags: 0
