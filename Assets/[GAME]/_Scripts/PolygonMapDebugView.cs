@@ -2,23 +2,26 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
-using NaughtyAttributes;
 using System;
 
 public class PolygonMapDebugView : MonoBehaviour
 {
-	[Flags] //This attribute turns the enum into a bitmask, and Unity has a special inspactor for bitmasks. We use a bitmask so we can draw more modes at once. Since this is a int, we can have up to 32 values
-	public enum ViewModes
+	public enum ViewBG
 	{
-		VoronoiCells		= 1 << 0, //Bit shifts the bit value of "1" (something like 0001, but with 32 digits, since this is a int) 0 bit to the left
-		VoronoiEdges		= 1 << 1, //Same as above, but shifting 1 bit to the left, so the result will be "0010" (which is 2 in Decimal)
-		VoronoiCorners		= 1 << 2,
-		DelaunayEdges		= 1 << 3,
-		DelaunayCorners		= 1 << 4,
-		Neighboor			= 1 << 5,
-		Noise				= 1 << 6,
-		Borders				= 1 << 7,
-		Water				= 1 << 8,
+		VoronoiCells,
+		Noise,
+		Water,
+	}
+
+	[Flags] //This attribute turns the enum into a bitmask, and Unity has a special inspactor for bitmasks. We use a bitmask so we can draw more modes at once. Since this is a int, we can have up to 32 values
+	public enum Overlays
+	{
+		VoronoiEdges		= 1 << 0, //Bit shifts the bit value of "1" (something like 0001, but with 32 digits, since this is a int) 0 bit to the left
+		VoronoiCorners		= 1 << 1, //Same as above, but shifting 1 bit to the left, so the result will be "0010" (which is 2 in Decimal)
+		DelaunayEdges		= 1 << 2,
+		DelaunayCorners		= 1 << 3,
+		Neighboor			= 1 << 4,
+		Borders				= 1 << 5,
 	}
 
     public PolygonMap generator;
@@ -26,7 +29,8 @@ public class PolygonMapDebugView : MonoBehaviour
 	public Vector2Int resolution = new Vector2Int(512, 512);
 	public ComputeShader computeShader;
 	[Header("Options")]
-	public ViewModes views;
+	public ViewBG background;
+	public Overlays overlays;
 	public int neighboorID = -1;
 
 	private Color[,] texColors;
@@ -83,8 +87,7 @@ public class PolygonMapDebugView : MonoBehaviour
 		rt?.Release();
 	}
 
-	#region Generations
-	[Button]
+	#region Generation
 	private void GenerateDebugTexture()
 	{
 		if (!Application.isPlaying)
@@ -93,7 +96,7 @@ public class PolygonMapDebugView : MonoBehaviour
 			return;
 		}
 
-		if (rend == null || generator == null)
+		if (rend == null || generator == null || generator.delaunayCenters == null || generator.voronoiCorners.Count == 0)
 			return;
 
 		texColors = new Color[resolution.x, resolution.y];
@@ -101,30 +104,38 @@ public class PolygonMapDebugView : MonoBehaviour
 		//Draw the debug info into the texture. The order here defines the draw order
 
 		//BACKGROUND
-		if ((views & ViewModes.VoronoiCells) != 0)
-			DrawVoronoiCells();
-		else if ((views & ViewModes.Noise) != 0)
-			DrawNoise();
-		else if ((views & ViewModes.Water) != 0)
-			DrawWater();
+		switch (background)
+		{
+			case ViewBG.VoronoiCells:
+				DrawVoronoiCells();
+				break;
+			case ViewBG.Noise:
+				DrawNoise();
+				break;
+			case ViewBG.Water:
+				DrawWater();
+				break;
+			default:
+				break;
+		}
 
 		//OVERLAYS
-		if ((views & ViewModes.VoronoiEdges) != 0) //Here we "create" a new byte value by comparing "mode" with "voronoiCells" using a "&" (AND) bitwise operator. As an example, the comparision works like this: 0011 & 0110 = 0010. Then we compare with "0", since zero is "0000".
+		if ((overlays & Overlays.VoronoiEdges) != 0) //Here we "create" a new byte value by comparing "mode" with "voronoiCells" using a "&" (AND) bitwise operator. As an example, the comparision works like this: 0011 & 0110 = 0010. Then we compare with "0", since zero is "0000".
 			DrawVoronoiEdges();
 
-		if ((views & ViewModes.VoronoiCorners) != 0)
+		if ((overlays & Overlays.VoronoiCorners) != 0)
 			DrawVoronoiCorners();
 
-		if ((views & ViewModes.DelaunayEdges) != 0)
+		if ((overlays & Overlays.DelaunayEdges) != 0)
 			DrawDelaunayEdges();
 
-		if ((views & ViewModes.DelaunayCorners) != 0)
+		if ((overlays & Overlays.DelaunayCorners) != 0)
 			DrawDelaunayCorners();
 
-		if ((views & ViewModes.Neighboor) != 0)
+		if ((overlays & Overlays.Neighboor) != 0)
 			DrawNeighboors();
 
-		if ((views & ViewModes.Borders) != 0)
+		if ((overlays & Overlays.Borders) != 0)
 			DrawMapBorders();
 
 		//Create the texture and assign the texture using a Helper Compute Shader
@@ -141,7 +152,8 @@ public class PolygonMapDebugView : MonoBehaviour
 		{
 			for (int y = 0; y < resolution.y; y++)
 			{
-				float value = cellIDs[x + y * resolution.y] / (float)generator.delaunayCenters.Count;
+				int currentCellID = cellIDs[x + y * resolution.y];
+				float value = currentCellID / (float)generator.delaunayCenters.Count;
 				texColors[x, y] = new Color(value, value, value);
 			}
 		}
@@ -266,18 +278,15 @@ public class PolygonMapDebugView : MonoBehaviour
 		Color water = Color.blue;
 		Color land = Color.white;
 
-		//Paint the cells
+		int[] cellIDs = GetClosestCenterForPixels();
+
 		for (int x = 0; x < resolution.x; x++)
 		{
 			for (int y = 0; y < resolution.y; y++)
 			{
-				Vector2 pos = MapTextureCoordToGraphCoords(x, y);
-				CellCenter c = GetClosestCenterFromPoint(pos);
-
-				if (c != null)
-				{
-					texColors[x, y] = c.isWater ? water : land;
-				}
+				int currentCellID = cellIDs[x + y * resolution.y];
+				float value = currentCellID / (float)generator.delaunayCenters.Count;
+				texColors[x, y] = generator.delaunayCenters[currentCellID].isWater ? water : land;
 			}
 		}
 	}
@@ -492,5 +501,8 @@ public class PolygonMapDebugView : MonoBehaviour
 
 		if (neighboorID >= generator.polygonCount)
 			neighboorID = generator.polygonCount - 1;
+
+		if (Application.isPlaying)
+			GenerateDebugTexture();
 	}
 }

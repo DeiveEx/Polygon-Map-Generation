@@ -344,7 +344,7 @@ MonoBehaviour:
   rend: {fileID: 364495159}
   resolution: {x: 512, y: 512}
   computeShader: {fileID: 7200000, guid: 167bf3617b41b45429f09e053486f894, type: 3}
-  mode: 64
+  views: 1
   neighboorID: 9
 --- !u!1 &1743969025
 GameObject:
