@@ -228,7 +228,7 @@ Camera:
   m_Enabled: 1
   serializedVersion: 2
   m_ClearFlags: 2
-  m_BackGroundColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
+  m_BackGroundColor: {r: 0.4, g: 0.4, b: 0.4, a: 1}
   m_projectionMatrixMode: 1
   m_GateFitMode: 2
   m_FOVAxisMode: 0
@@ -307,13 +307,39 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   useCustomSeed: 0
   seed: 0
-  noiseSeed: -18851
   variation: 0
-  polygonCount: 50
+  polygonCount: 200
   size: {x: 2, y: 2}
-  relaxation: 2
+  relaxation: 5
+  elevationCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 1
+      outSlope: 1
+      tangentMode: 34
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 1
+      outSlope: 1
+      tangentMode: 34
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  noiseSeed: -18851
   noiseSize: 3
-  borderSize: 1
+  octaves: 4
+  persistence: 0.5
+  lacunarity: 2
 --- !u!4 &1554614732
 Transform:
   m_ObjectHideFlags: 0
@@ -344,8 +370,10 @@ MonoBehaviour:
   rend: {fileID: 364495159}
   resolution: {x: 512, y: 512}
   computeShader: {fileID: 7200000, guid: 167bf3617b41b45429f09e053486f894, type: 3}
-  views: 1
+  background: 3
+  overlays: 128
   neighboorID: 9
+  test: 0
 --- !u!1 &1743969025
 GameObject:
   m_ObjectHideFlags: 0

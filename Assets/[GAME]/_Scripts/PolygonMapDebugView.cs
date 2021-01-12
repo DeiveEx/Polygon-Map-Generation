@@ -10,7 +10,8 @@ public class PolygonMapDebugView : MonoBehaviour
 	{
 		VoronoiCells,
 		Noise,
-		Water,
+		WaterAndLand,
+		Elevation,
 	}
 
 	[Flags] //This attribute turns the enum into a bitmask, and Unity has a special inspactor for bitmasks. We use a bitmask so we can draw more modes at once. Since this is a int, we can have up to 32 values
@@ -22,6 +23,8 @@ public class PolygonMapDebugView : MonoBehaviour
 		DelaunayCorners		= 1 << 3,
 		Neighboor			= 1 << 4,
 		Borders				= 1 << 5,
+		Coast				= 1 << 6,
+		Slopes				= 1 << 7,
 	}
 
     public PolygonMap generator;
@@ -32,6 +35,7 @@ public class PolygonMapDebugView : MonoBehaviour
 	public ViewBG background;
 	public Overlays overlays;
 	public int neighboorID = -1;
+	public bool test;
 
 	private Color[,] texColors;
 	private RenderTexture rt;
@@ -56,6 +60,7 @@ public class PolygonMapDebugView : MonoBehaviour
 		//Create a render texture and enable random write so we can rend things to it
 		rt = new RenderTexture(resolution.x, resolution.y, 0, RenderTextureFormat.ARGB32);
 		rt.enableRandomWrite = true;
+		rt.filterMode = FilterMode.Point;
 		rt.Create();
 
 		//Set the texture for the renderer
@@ -96,7 +101,7 @@ public class PolygonMapDebugView : MonoBehaviour
 			return;
 		}
 
-		if (rend == null || generator == null || generator.delaunayCenters == null || generator.voronoiCorners.Count == 0)
+		if (rend == null || generator == null || generator.cells == null || generator.corners.Count == 0)
 			return;
 
 		texColors = new Color[resolution.x, resolution.y];
@@ -112,14 +117,20 @@ public class PolygonMapDebugView : MonoBehaviour
 			case ViewBG.Noise:
 				DrawNoise();
 				break;
-			case ViewBG.Water:
+			case ViewBG.WaterAndLand:
 				DrawWater();
+				break;
+			case ViewBG.Elevation:
+				DrawElevation();
 				break;
 			default:
 				break;
 		}
 
 		//OVERLAYS
+		if ((overlays & Overlays.Borders) != 0)
+			DrawMapBorders();
+
 		if ((overlays & Overlays.VoronoiEdges) != 0) //Here we "create" a new byte value by comparing "mode" with "voronoiCells" using a "&" (AND) bitwise operator. As an example, the comparision works like this: 0011 & 0110 = 0010. Then we compare with "0", since zero is "0000".
 			DrawVoronoiEdges();
 
@@ -135,8 +146,12 @@ public class PolygonMapDebugView : MonoBehaviour
 		if ((overlays & Overlays.Neighboor) != 0)
 			DrawNeighboors();
 
-		if ((overlays & Overlays.Borders) != 0)
-			DrawMapBorders();
+		if ((overlays & Overlays.Coast) != 0)
+			DrawCoast();
+
+		if ((overlays & Overlays.Slopes) != 0)
+			DrawSlopes();
+
 
 		//Create the texture and assign the texture using a Helper Compute Shader
 		ApplyChangesToTexture();
@@ -153,7 +168,7 @@ public class PolygonMapDebugView : MonoBehaviour
 			for (int y = 0; y < resolution.y; y++)
 			{
 				int currentCellID = cellIDs[x + y * resolution.y];
-				float value = currentCellID / (float)generator.delaunayCenters.Count;
+				float value = currentCellID / (float)generator.cells.Count;
 				texColors[x, y] = new Color(value, value, value);
 			}
 		}
@@ -161,7 +176,7 @@ public class PolygonMapDebugView : MonoBehaviour
 
 	private void DrawVoronoiEdges()
 	{
-		foreach (var edge in generator.mapEdges)
+		foreach (var edge in generator.edges)
 		{
 			Vector2Int pos0 = MapGraphCoordToTextureCoords(edge.v0.position.x, edge.v0.position.y);
 			Vector2Int pos1 = MapGraphCoordToTextureCoords(edge.v1.position.x, edge.v1.position.y);
@@ -171,7 +186,7 @@ public class PolygonMapDebugView : MonoBehaviour
 
 	private void DrawVoronoiCorners()
 	{
-		foreach (var corner in generator.voronoiCorners)
+		foreach (var corner in generator.corners)
 		{
 			Vector2Int pos = MapGraphCoordToTextureCoords(corner.position.x, corner.position.y);
 			DrawCircle(pos.x, pos.y, POINT_SIZE, Color.blue);
@@ -180,7 +195,7 @@ public class PolygonMapDebugView : MonoBehaviour
 
 	private void DrawDelaunayEdges()
 	{
-		foreach (var edge in generator.mapEdges)
+		foreach (var edge in generator.edges)
 		{
 			Vector2Int pos0 = MapGraphCoordToTextureCoords(edge.d0.position.x, edge.d0.position.y);
 			Vector2Int pos1 = MapGraphCoordToTextureCoords(edge.d1.position.x, edge.d1.position.y);
@@ -190,7 +205,7 @@ public class PolygonMapDebugView : MonoBehaviour
 
 	private void DrawDelaunayCorners()
 	{
-		foreach (var center in generator.delaunayCenters)
+		foreach (var center in generator.cells)
 		{
 			Vector2Int pos = MapGraphCoordToTextureCoords(center.position.x, center.position.y);
 			DrawCircle(pos.x, pos.y, POINT_SIZE, Color.red);
@@ -199,7 +214,7 @@ public class PolygonMapDebugView : MonoBehaviour
 
 	private void DrawNeighboors()
 	{
-		CellCenter c = generator.delaunayCenters[neighboorID];
+		CellCenter c = generator.cells[neighboorID];
 
 		Vector2Int pos = MapGraphCoordToTextureCoords(c.position.x, c.position.y);
 		DrawWireCircle(pos.x, pos.y, POINT_SIZE * 3, 2, Color.green);
@@ -230,21 +245,29 @@ public class PolygonMapDebugView : MonoBehaviour
 
 	private void DrawMapBorders()
 	{
-		foreach (var corner in generator.voronoiCorners)
+		int[] cellIDs = GetClosestCenterForPixels();
+
+		for (int x = 0; x < resolution.x; x++)
+		{
+			for (int y = 0; y < resolution.y; y++)
+			{
+				CellCenter c = generator.cells[cellIDs[x + y * resolution.y]];
+
+				if (c.isBorder)
+				{
+					texColors[x, y] = Color.red;
+				}
+			}
+		}
+
+		Color borderCorner = new Color(1, .5f, .5f);
+
+		foreach (var corner in generator.corners)
 		{
 			if (corner.isBorder)
 			{
 				Vector2Int pos = MapGraphCoordToTextureCoords(corner.position.x, corner.position.y);
-				DrawSquare(pos.x, pos.y, POINT_SIZE * 2, Color.red);
-			}
-		}
-
-		foreach (var center in generator.delaunayCenters)
-		{
-			if (center.isBorder)
-			{
-				Vector2Int pos = MapGraphCoordToTextureCoords(center.position.x, center.position.y);
-				DrawWireSquare(pos.x, pos.y, POINT_SIZE * 2, 2, Color.red);
+				DrawCircle(pos.x, pos.y, POINT_SIZE * 2, borderCorner);
 			}
 		}
 	}
@@ -266,17 +289,23 @@ public class PolygonMapDebugView : MonoBehaviour
 				};
 
 				float value = Mathf.PerlinNoise(perlinPos.x * generator.noiseSize + generator.noiseSeed, perlinPos.y * generator.noiseSize + generator.noiseSeed);
-				float value2 = Mathf.Pow(normalizedPos.magnitude, generator.borderSize);
+				float value2 = 0.3f + 0.3f * normalizedPos.magnitude * normalizedPos.magnitude; //Same formula used in the generation
+
+				value = BetterPerlinNoise.SamplePoint(perlinPos.x * generator.noiseSize + generator.noiseSeed, perlinPos.y * generator.noiseSize + generator.noiseSeed, generator.octaves, generator.persistence, generator.lacunarity);
 
 				texColors[x, y] = value > value2 ? Color.gray : Color.black;
+				texColors[x, y] = Color.white * value;
+				texColors[x, y].a = 1;
 			}
 		}
 	}
 
 	private void DrawWater()
 	{
-		Color water = Color.blue;
-		Color land = Color.white;
+		Color ocean = new Color(.1f,.1f, .5f);
+		Color water = new Color(.5f, .5f, .7f);
+		Color land = new Color(.7f, .7f, .5f);
+		Color coast = new Color(.5f, .5f, .3f);
 
 		int[] cellIDs = GetClosestCenterForPixels();
 
@@ -285,11 +314,86 @@ public class PolygonMapDebugView : MonoBehaviour
 			for (int y = 0; y < resolution.y; y++)
 			{
 				int currentCellID = cellIDs[x + y * resolution.y];
-				float value = currentCellID / (float)generator.delaunayCenters.Count;
-				texColors[x, y] = generator.delaunayCenters[currentCellID].isWater ? water : land;
+				CellCenter c = generator.cells[currentCellID];
+
+				if (c.isWater)
+				{
+					if (c.isOcean)
+					{
+						texColors[x, y] = ocean;
+					}
+					else
+					{
+						texColors[x, y] = water;
+					}
+				}
+				else
+				{
+					if (c.isCoast)
+					{
+						texColors[x, y] = coast;
+					}
+					else
+					{
+						texColors[x, y] = land;
+					}
+				}
 			}
 		}
 	}
+
+	private void DrawCoast()
+	{
+		foreach (var corner in generator.corners)
+		{
+			if (corner.isCoast)
+			{
+				Vector2Int pos = MapGraphCoordToTextureCoords(corner.position.x, corner.position.y);
+				DrawWireCircle(pos.x, pos.y, POINT_SIZE, 2, Color.white);
+			}
+		}
+	}
+
+	private void DrawElevation()
+	{
+		int[] cellIDs = GetClosestCenterForPixels();
+		Color low = new Color(.2f, .2f, .2f);
+		Color high = Color.white;
+		Color water = Color.blue * 0.5f;
+		water.a = 1;
+
+		for (int x = 0; x < resolution.x; x++)
+		{
+			for (int y = 0; y < resolution.y; y++)
+			{
+				CellCenter c = generator.cells[cellIDs[x + y * resolution.y]];
+
+				if (c.elevation < 0)
+				{
+					texColors[x, y] = water;
+				}
+				else
+				{
+					texColors[x, y] = Color.Lerp(low, high, c.elevation);
+				}
+			}
+		}
+	}
+
+	private void DrawSlopes()
+	{
+		foreach (var corner in generator.corners)
+		{
+			if (corner == corner.downslope || corner.isOcean || corner.isCoast)
+				continue;
+
+			Vector2Int pos = MapGraphCoordToTextureCoords(corner.position.x, corner.position.y);
+			Vector2Int pos2 = MapGraphCoordToTextureCoords(corner.downslope.position.x, corner.downslope.position.y);
+			Vector2 dir = pos2 - pos;
+			DrawArrow(pos.x, pos.y, dir, dir.magnitude * 0.5f, POINT_SIZE / 3, Color.red);
+		}
+	}
+
 	#endregion
 
 	#region Helper Functions
@@ -438,12 +542,32 @@ public class PolygonMapDebugView : MonoBehaviour
 		DrawCircle(x1, y1, thickness, c);
 	}
 
+	private void DrawArrow(int x0, int y0, int x1, int y1, int thickness, Color c)
+	{
+		Vector2 dir = new Vector2(x0, y0) - new Vector2(x1, y1);
+		float headSize = dir.magnitude * .3f;
+		float arrowHeadAngle = 30;
+
+		DrawLine(x0, y0, x1, y1, thickness, c);
+
+		Vector2 arrowSide1 = Quaternion.AngleAxis(arrowHeadAngle, Vector3.forward) * dir;
+		Vector2 arrowSide2 = Quaternion.AngleAxis(-arrowHeadAngle, Vector3.forward) * dir;
+
+		DrawLine(x1, y1, (int)(x1 + arrowSide1.normalized.x * headSize), (int)(y1 + arrowSide1.normalized.y * headSize), thickness, c);
+		DrawLine(x1, y1, (int)(x1 + arrowSide2.normalized.x * headSize), (int)(y1 + arrowSide2.normalized.y * headSize), thickness, c);
+	}
+
+	private void DrawArrow(int x, int y, Vector2 dir, float lenght, int thickness, Color c)
+	{
+		DrawArrow(x, y, (int)(x + dir.normalized.x * lenght), (int)(y + dir.normalized.y * lenght), thickness, c);
+	}
+
 	private CellCenter GetClosestCenterFromPoint(Vector2 point)
 	{
 		float smallestDistance = float.MaxValue;
 		CellCenter c = null;
 
-		foreach (var center in generator.delaunayCenters)
+		foreach (var center in generator.cells)
 		{
 			float d = Vector2.Distance(point, center.position);
 			if (d < smallestDistance)
@@ -460,13 +584,13 @@ public class PolygonMapDebugView : MonoBehaviour
 	{
 
 		//Send the data to the compute shader so the GPU can do the hard work
-		CellData[] cellData = new CellData[generator.delaunayCenters.Count];
-		ComputeBuffer cellDataBuffer = new ComputeBuffer(generator.delaunayCenters.Count, sizeof(int) * 2);
+		CellData[] cellData = new CellData[generator.cells.Count];
+		ComputeBuffer cellDataBuffer = new ComputeBuffer(generator.cells.Count, sizeof(int) * 2);
 		ComputeBuffer cellIdByPixeldBuffer = new ComputeBuffer(resolution.x * resolution.y, sizeof(int)); //This is the buffer we're gonna read from
 
 		for (int i = 0; i < cellData.Length; i++)
 		{
-			CellCenter c = generator.delaunayCenters[i];
+			CellCenter c = generator.cells[i];
 			cellData[i] = new CellData() {
 				position = MapGraphCoordToTextureCoords(c.position.x, c.position.y)
 			};
@@ -496,8 +620,8 @@ public class PolygonMapDebugView : MonoBehaviour
 		if (generator == null)
 			return;
 
-		if (neighboorID < -1)
-			neighboorID = -1;
+		if (neighboorID < 0)
+			neighboorID = 0;
 
 		if (neighboorID >= generator.polygonCount)
 			neighboorID = generator.polygonCount - 1;
