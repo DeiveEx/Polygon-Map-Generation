@@ -305,8 +305,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ea52fd75e0c583345a40758fb2044213, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  useCustomSeed: 0
-  seed: 0
+  useCustomSeed: 1
+  seed: -730158218
   variation: 0
   polygonCount: 200
   size: {x: 2, y: 2}
@@ -368,9 +368,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   generator: {fileID: 1554614731}
   rend: {fileID: 364495159}
-  resolution: {x: 512, y: 512}
+  resolution: {x: 1024, y: 1024}
   computeShader: {fileID: 7200000, guid: 167bf3617b41b45429f09e053486f894, type: 3}
-  background: 3
+  background: 2
   overlays: 128
   neighboorID: 9
   test: 0
