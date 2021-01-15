@@ -27,6 +27,7 @@ public class PolygonMapDebugView : MonoBehaviour
 		Borders				= 1 << 5,
 		Coast				= 1 << 6,
 		Slopes				= 1 << 7,
+		Rivers				= 1 << 8,
 	}
 
     public PolygonMap generator;
@@ -136,7 +137,7 @@ public class PolygonMapDebugView : MonoBehaviour
 				DrawNoise();
 				break;
 			case ViewBG.WaterAndLand:
-				DrawWater();
+				DrawWaterAndLand();
 				break;
 			case ViewBG.Elevation:
 				DrawElevation();
@@ -163,6 +164,9 @@ public class PolygonMapDebugView : MonoBehaviour
 
 		if ((overlays & Overlays.Coast) != 0)
 			DrawCoast();
+
+		if ((overlays & Overlays.Rivers) != 0)
+			DrawRivers();
 
 		if ((overlays & Overlays.Slopes) != 0)
 			DrawSlopes();
@@ -338,9 +342,7 @@ public class PolygonMapDebugView : MonoBehaviour
 	{
 		foreach (var edge in generator.edges)
 		{
-			Vector2Int pos0 = MapGraphCoordToTextureCoords(edge.v0.position.x, edge.v0.position.y);
-			Vector2Int pos1 = MapGraphCoordToTextureCoords(edge.v1.position.x, edge.v1.position.y);
-			DrawLine(pos0.x, pos0.y, pos1.x, pos1.y, 1, Color.white);
+			DrawGraphEdge(edge, Color.white, 1, true);
 		}
 	}
 
@@ -348,8 +350,7 @@ public class PolygonMapDebugView : MonoBehaviour
 	{
 		foreach (var corner in generator.corners)
 		{
-			Vector2Int pos = MapGraphCoordToTextureCoords(corner.position.x, corner.position.y);
-			DrawCircle(pos.x, pos.y, POINT_SIZE, Color.blue);
+			DrawGraphPoint(corner, Color.blue, POINT_SIZE);
 		}
 	}
 
@@ -357,9 +358,7 @@ public class PolygonMapDebugView : MonoBehaviour
 	{
 		foreach (var edge in generator.edges)
 		{
-			Vector2Int pos0 = MapGraphCoordToTextureCoords(edge.d0.position.x, edge.d0.position.y);
-			Vector2Int pos1 = MapGraphCoordToTextureCoords(edge.d1.position.x, edge.d1.position.y);
-			DrawLine(pos0.x, pos0.y, pos1.x, pos1.y, 1, Color.black);
+			DrawGraphEdge(edge, Color.black, 1, false);
 		}
 	}
 
@@ -367,39 +366,29 @@ public class PolygonMapDebugView : MonoBehaviour
 	{
 		foreach (var center in generator.cells)
 		{
-			Vector2Int pos = MapGraphCoordToTextureCoords(center.position.x, center.position.y);
-			DrawCircle(pos.x, pos.y, POINT_SIZE, Color.red);
+			DrawGraphPoint(center, Color.red, POINT_SIZE);
 		}
 	}
 
 	private void DrawNeighboors()
 	{
 		CellCenter c = generator.cells[selectedID];
-
-		Vector2Int pos = MapGraphCoordToTextureCoords(c.position.x, c.position.y);
-		DrawWireCircle(pos.x, pos.y, POINT_SIZE * 3, 2, Color.green);
+		DrawGraphPoint(c, Color.green, POINT_SIZE * 3, 2);
 
 		for (int i = 0; i < c.neighborCells.Count; i++)
 		{
-			pos = MapGraphCoordToTextureCoords(c.neighborCells[i].position.x, c.neighborCells[i].position.y);
-			DrawWireCircle(pos.x, pos.y, POINT_SIZE * 2, 2, Color.magenta);
+			DrawGraphPoint(c.neighborCells[i], Color.magenta, POINT_SIZE * 2, 2);
 		}
 
 		for (int i = 0; i < c.cellCorners.Count; i++)
 		{
-			pos = MapGraphCoordToTextureCoords(c.cellCorners[i].position.x, c.cellCorners[i].position.y);
-			DrawWireCircle(pos.x, pos.y, POINT_SIZE * 2, 2, Color.yellow);
+			DrawGraphPoint(c.cellCorners[i], Color.yellow, POINT_SIZE * 2, 2);
 		}
 
 		for (int i = 0; i < c.borderEdges.Count; i++)
 		{
-			Vector2Int pos0 = MapGraphCoordToTextureCoords(c.borderEdges[i].d0.position.x, c.borderEdges[i].d0.position.y);
-			Vector2Int pos1 = MapGraphCoordToTextureCoords(c.borderEdges[i].d1.position.x, c.borderEdges[i].d1.position.y);
-			DrawLine(pos0.x, pos0.y, pos1.x, pos1.y, 1, new Color(0, .5f, .5f));
-
-			pos0 = MapGraphCoordToTextureCoords(c.borderEdges[i].v0.position.x, c.borderEdges[i].v0.position.y);
-			pos1 = MapGraphCoordToTextureCoords(c.borderEdges[i].v1.position.x, c.borderEdges[i].v1.position.y);
-			DrawLine(pos0.x, pos0.y, pos1.x, pos1.y, 1, Color.cyan);
+			DrawGraphEdge(c.borderEdges[i], new Color(0, .5f, .5f), 1, false);
+			DrawGraphEdge(c.borderEdges[i], Color.cyan, 1, true);
 		}
 	}
 
@@ -426,8 +415,7 @@ public class PolygonMapDebugView : MonoBehaviour
 		{
 			if (corner.isBorder)
 			{
-				Vector2Int pos = MapGraphCoordToTextureCoords(corner.position.x, corner.position.y);
-				DrawCircle(pos.x, pos.y, POINT_SIZE * 2, borderCorner);
+				DrawGraphPoint(corner, borderCorner, POINT_SIZE * 2);
 			}
 		}
 	}
@@ -448,10 +436,9 @@ public class PolygonMapDebugView : MonoBehaviour
 					y = (normalizedPos.y * 0.5f + 0.5f) * generator.size.y
 				};
 
-				float value = Mathf.PerlinNoise(perlinPos.x * generator.noiseSize + generator.noiseSeed, perlinPos.y * generator.noiseSize + generator.noiseSeed);
+				float value = BetterPerlinNoise.SamplePoint(perlinPos.x * generator.noiseSize + generator.noiseSeed, perlinPos.y * generator.noiseSize + generator.noiseSeed, generator.octaves);
 				float value2 = 0.3f + 0.3f * normalizedPos.magnitude * normalizedPos.magnitude; //Same formula used in the generation
 
-				value = BetterPerlinNoise.SamplePoint(perlinPos.x * generator.noiseSize + generator.noiseSeed, perlinPos.y * generator.noiseSize + generator.noiseSeed, generator.octaves, generator.persistence, generator.lacunarity);
 
 				texColors[x, y] = value > value2 ? Color.gray : Color.black;
 				texColors[x, y] = Color.white * value;
@@ -460,7 +447,7 @@ public class PolygonMapDebugView : MonoBehaviour
 		}
 	}
 
-	private void DrawWater()
+	private void DrawWaterAndLand()
 	{
 		Color ocean = new Color(.1f,.1f, .5f);
 		Color water = new Color(.5f, .5f, .7f);
@@ -508,8 +495,7 @@ public class PolygonMapDebugView : MonoBehaviour
 		{
 			if (corner.isCoast)
 			{
-				Vector2Int pos = MapGraphCoordToTextureCoords(corner.position.x, corner.position.y);
-				DrawWireCircle(pos.x, pos.y, POINT_SIZE, 2, Color.white);
+				DrawGraphPoint(corner, Color.white, POINT_SIZE, 2);
 			}
 		}
 	}
@@ -546,23 +532,33 @@ public class PolygonMapDebugView : MonoBehaviour
 	{
 		foreach (var corner in generator.corners)
 		{
-			if (corner.isOcean || corner.isCoast)
-			{
-				continue;
-			}
+			//if (corner.isOcean || corner.isCoast)
+			//{
+			//	continue;
+			//}
 
-			if (corner.downslope == null)
+			if (corner.downslopeCorner == null)
 			{
 				continue;
 			}
 
 			Vector2Int pos = MapGraphCoordToTextureCoords(corner.position.x, corner.position.y);
-			Vector2Int pos2 = MapGraphCoordToTextureCoords(corner.downslope.position.x, corner.downslope.position.y);
+			Vector2Int pos2 = MapGraphCoordToTextureCoords(corner.downslopeCorner.position.x, corner.downslopeCorner.position.y);
 			Vector2 dir = pos2 - pos;
 			DrawArrow(pos.x, pos.y, dir, dir.magnitude * 0.4f, POINT_SIZE / 3, Color.red);
 		}
 	}
 
+	private void DrawRivers()
+	{
+		foreach (var edge in generator.edges)
+		{
+			if(edge.waterVolume > 0)
+			{
+				DrawGraphEdge(edge, Color.blue, edge.waterVolume, true);
+			}
+		}
+	}
 	#endregion
 
 	#region Draw Shapes
@@ -682,6 +678,36 @@ public class PolygonMapDebugView : MonoBehaviour
 	private void DrawArrow(int x, int y, Vector2 dir, float lenght, int thickness, Color c)
 	{
 		DrawArrow(x, y, (int)(x + dir.normalized.x * lenght), (int)(y + dir.normalized.y * lenght), thickness, c);
+	}
+
+	private void DrawGraphPoint(MapPoint point, Color c, int size, int thickness = 0)
+	{
+		Vector2Int pos = MapGraphCoordToTextureCoords(point.position.x, point.position.y);
+
+		if (thickness == 0)
+		{
+			DrawCircle(pos.x, pos.y, size, c);
+		}
+		else
+		{
+			DrawWireCircle(pos.x, pos.y, size, thickness, c);
+		}
+	}
+
+	private void DrawGraphEdge(CellEdge edge, Color c, int thickness, bool trueForVoronoi)
+	{
+		if (trueForVoronoi)
+		{
+			Vector2Int pos0 = MapGraphCoordToTextureCoords(edge.v0.position.x, edge.v0.position.y);
+			Vector2Int pos1 = MapGraphCoordToTextureCoords(edge.v1.position.x, edge.v1.position.y);
+			DrawLine(pos0.x, pos0.y, pos1.x, pos1.y, thickness, c);
+		}
+		else
+		{
+			Vector2Int pos0 = MapGraphCoordToTextureCoords(edge.d0.position.x, edge.d0.position.y);
+			Vector2Int pos1 = MapGraphCoordToTextureCoords(edge.d1.position.x, edge.d1.position.y);
+			DrawLine(pos0.x, pos0.y, pos1.x, pos1.y, thickness, c);
+		}
 	}
 	#endregion
 

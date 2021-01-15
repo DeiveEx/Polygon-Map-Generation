@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class MapEdge
+public class CellEdge
 {
 	public int index;
 
@@ -12,5 +12,7 @@ public class MapEdge
 
 	//Voronoi edges
 	public CellCorner v0 = new CellCorner();
-	public CellCorner v1 = new CellCorner(); 
+	public CellCorner v1 = new CellCorner();
+
+	public int waterVolume;
 }

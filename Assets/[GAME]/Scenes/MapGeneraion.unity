@@ -154,7 +154,7 @@ RectTransform:
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 1, y: 1}
+  m_AnchorMax: {x: 0, y: 0}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -717,9 +717,9 @@ RectTransform:
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 1, y: 1}
+  m_AnchorMax: {x: 0, y: 0}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: -7, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0, y: 1}
 --- !u!114 &1099655130
 MonoBehaviour:
@@ -787,7 +787,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1252068007
 RectTransform:
   m_ObjectHideFlags: 0
@@ -869,12 +869,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ea52fd75e0c583345a40758fb2044213, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  useCustomSeed: 1
+  useCustomSeeds: 1
   seed: -730158218
-  variation: 0
-  polygonCount: 200
+  polygonCount: 1000
   size: {x: 2, y: 2}
-  relaxation: 5
+  relaxation: 4
   elevationCurve:
     serializedVersion: 2
     m_Curve:
@@ -899,11 +898,11 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  noiseSeed: -18851
+  noiseSeed: 681
   noiseSize: 3
-  octaves: 4
-  persistence: 0.5
-  lacunarity: 2
+  octaves: 1
+  springsSeed: 5
+  numberOfSprings: 5
 --- !u!4 &1554614732
 Transform:
   m_ObjectHideFlags: 0
@@ -936,9 +935,8 @@ MonoBehaviour:
   infoText: {fileID: 712017686}
   resolution: {x: 1024, y: 1024}
   background: 3
-  overlays: 144
+  overlays: 256
   selectedID: 0
-  pointSize: 5
 --- !u!1 &1743969025
 GameObject:
   m_ObjectHideFlags: 0

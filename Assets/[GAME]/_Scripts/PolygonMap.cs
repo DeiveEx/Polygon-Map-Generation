@@ -8,26 +8,28 @@ using System.Linq;
 public class PolygonMap : MonoBehaviour
 {
 	//Properties
+	public bool useCustomSeeds;
+
 	[Header("Map")]
-	public bool useCustomSeed;
 	public int seed;
-	public int variation;
 	public int polygonCount = 200; //The number of polygons/sites we want
 	public Vector2 size;
     public int relaxation = 0;
 	public AnimationCurve elevationCurve = AnimationCurve.Linear(0, 0, 1, 1);
 
-	[HideInInspector] public int noiseSeed; //Ther perlin noise seed
 	[Header("Noise")]
+	public int noiseSeed;
     public float noiseSize = 1;
     [Range(1, 4)] public int octaves = 4;
-	[HideInInspector] public float persistence = 0.5f; //We could expose this if we want mroe control over the noise
-	[HideInInspector] public float lacunarity = 2; //We could expose this if we want mroe control over the noise
+
+	[Header("Rivers")]
+	public int springsSeed;
+	public int numberOfSprings = 5;
 
 	//Graphs. Here are the info necessary to build both the Voronoi Graph than the Delaunay triangulation Graph
 	public List<CellCenter> cells = new List<CellCenter>(); //The center of each cell makes up a corner for the Delaunay triangles
 	public List<CellCorner> corners = new List<CellCorner>(); //The corners of the cells. Also the center of the Delaunay triangles
-	public List<MapEdge> edges = new List<MapEdge>(); //We use a single object here, but we are representing two edges for each object (the voronoi edge and the Delaunay Edge)
+	public List<CellEdge> edges = new List<CellEdge>(); //We use a single object here, but we are representing two edges for each object (the voronoi edge and the Delaunay Edge)
 
 	//Events
 	public event System.Action onMapGenerated;
@@ -53,21 +55,20 @@ public class PolygonMap : MonoBehaviour
 		//Clear all map info
 		ResetMapInfo();
 
-		if (!useCustomSeed)
+		if (!useCustomSeeds)
 		{
 			seed = Random.Range(int.MinValue, int.MaxValue);
 		}
 
 		//Set the seed for the random system
 		Random.InitState(seed);
-		noiseSeed = Random.Range(0, 1000); //We use a second, lower seed for the perlin noise because numbers too big can cause problems
 
 		List<Vector2> points = GenerateRandomPoints();
 		GenerateGraphs(points);
 		AssignWater(); //He is where we define the general shape of the island
 		AssignOceanCoastAndLand();
 		AssignElevations(); //For this case, we are making that the farthest from the coast, the higher the elevation
-		//AddRivers();
+		AddRivers();
 
 		//Execute an event saying we finished our generation
 		onMapGenerated?.Invoke();
@@ -155,7 +156,7 @@ public class PolygonMap : MonoBehaviour
 			if (voronoiEdge.ClippedEnds == null)
 				continue;
 
-			MapEdge edge = new MapEdge();
+			CellEdge edge = new CellEdge();
 			edge.index = edges.Count;
 
 			//Set the voronoi edge
@@ -202,6 +203,8 @@ public class PolygonMap : MonoBehaviour
 
 	private void AssignWater()
 	{
+		noiseSeed = useCustomSeeds ? noiseSeed : Random.Range(0, 1000); //We use a second, lower seed for the perlin noise because numbers too big can cause problems
+
 		//Define a local helper function to determine if a corner is a land or not
 		//We use a perlin noise to determine the shape of the island, but anything can be used. We also use a radius from the center of the map, so the island is always surrounded by water
 		bool IsLand(Vector2 position)
@@ -212,13 +215,14 @@ public class PolygonMap : MonoBehaviour
 				y = ((position.y / size.y) - 0.5f) * 2
 			};
 
-			float value = BetterPerlinNoise.SamplePoint(position.x * noiseSize + noiseSeed, position.y * noiseSize + noiseSeed); //The perlin noise function isn't random, so we need to add a "seed" to offset the values
+			float value = BetterPerlinNoise.SamplePoint(position.x * noiseSize + noiseSeed, position.y * noiseSize + noiseSeed, octaves); //The perlin noise function isn't random, so we need to add a "seed" to offset the values
 
 			//We check if the value of the perlin is greater than the border value
 			return value > 0.3f + 0.3f * normalizedPosition.magnitude * normalizedPosition.magnitude; //I don't really understand how this formula works, I just see that 0.3f is the lowest possible value and that it makes a radial patterm since it uses the magnetude of the point
 		}
 
 		//Define if a corner is land or not based on some shape function (defined above)
+
 		foreach (var corner in corners)
 		{
 			corner.isWater = !IsLand(corner.position);
@@ -305,56 +309,6 @@ public class PolygonMap : MonoBehaviour
 
 	private void AssignElevations()
 	{
-		//Queue<CellCorner> queue = new Queue<CellCorner>();
-
-		////Find all coast corners. We set the coast as elevation 0, and everything else as elevation infinity. Later we gonna work our way up the coast, reassigning the elevation of each corner.
-		//foreach (var corner in corners)
-		//{
-		//	if (corner.isCoast)
-		//	{
-		//		corner.elevation = 0;
-		//		queue.Enqueue(corner);
-		//	}
-		//	else
-		//	{
-		//		corner.elevation = float.PositiveInfinity;
-		//	}
-		//}
-
-		//float highestElevation = 0;
-
-		////Travese through the map and set the elevation at each point. The farther away from the border, the highest the elevation. This guarantees that rivers always hava a way down to the ocean by going downhill
-		//while (queue.Count > 0)
-		//{
-		//	CellCorner corner = queue.Dequeue();
-
-		//	//Every step up we add a very low elevation value for water and a full 1 for land. These values are just for reference, since we gonna normalize them later
-		//	foreach (var neighbor in corner.neighborCorners)
-		//	{
-		//		float newElevation = 0.01f + corner.elevation;
-
-		//		//If this corner is a land, we add 1 on elevation
-		//		if (!corner.isWater && !neighbor.isWater)
-		//		{
-		//			newElevation += 1;
-		//		}
-
-		//		//If the new elevation value is lower than a previous set elevation, change the elevation and re-add it to the queue so we can process its neighbors
-		//		if (newElevation < neighbor.elevation)
-		//		{
-		//			neighbor.elevation = newElevation;
-		//			queue.Enqueue(neighbor);
-
-		//			if (newElevation > highestElevation)
-		//			{
-		//				highestElevation = newElevation;
-		//			}
-		//		}
-		//	}
-		//}
-
-		//===
-
 		List<CellCorner> queue = new List<CellCorner>(); //We have to use a List<T> instead of a Queue<T> because we need to add itens both at the begging and a the end of the list
 		float minElevation = 1, maxElevation = 1;
 
@@ -378,7 +332,7 @@ public class PolygonMap : MonoBehaviour
 			return c.isWater && !c.isOcean;
 		}
 
-		bool IsEdgeLake(MapEdge e)
+		bool IsEdgeLake(CellEdge e)
 		{
 			return IsCellLake(e.d0) || IsCellLake(e.d1);
 		}
@@ -391,7 +345,7 @@ public class PolygonMap : MonoBehaviour
 
 			for (int i = 0; i < currentCorner.connectedEdges.Count; i++)
 			{
-				MapEdge e = currentCorner.connectedEdges[(i + offset) % currentCorner.connectedEdges.Count]; //uses the offset to start at a random edge, but still circulate through all of them
+				CellEdge e = currentCorner.connectedEdges[(i + offset) % currentCorner.connectedEdges.Count]; //uses the offset to start at a random edge, but still circulate through all of them
 				CellCorner neighbor = e.v0 == currentCorner ? e.v1 : e.v0; //Get the corner that is part of this edge and opposite of the current corner
 				float newElevation = (IsEdgeLake(e) ? 0 : 1) + currentCorner.elevation;
 
@@ -399,7 +353,8 @@ public class PolygonMap : MonoBehaviour
 				if (newElevation < neighbor.elevation)
 				{
 					neighbor.elevation = newElevation;
-					neighbor.downslope = currentCorner; //Since this elevation is (corner elevation + (0 || 1)), that means this corner is either higher or the same height as the current corner, and so we can set the parent corner as the downslope
+					neighbor.downslopeCorner = currentCorner; //Since this elevation is (corner elevation + (0 || 1)), that means this corner is either higher or the same height as the current corner, and so we can set the parent corner as the downslope
+					neighbor.downslopeEdge = e;
 
 					//Update the min/max elevations
 					if (neighbor.isOcean && newElevation > minElevation)
@@ -421,8 +376,7 @@ public class PolygonMap : MonoBehaviour
 			}
 		}
 
-		//Normalize the elevations so we have a range from 0 to 1
-		Debug.Log($"Max: {maxElevation}; Min: {minElevation}");
+		//Normalize the elevations so we have a range from 0 to 1 for land/lakes, and -1 to 0 for oceans
 		foreach (var corner in corners)
 		{
 			if (!corner.isOcean)
@@ -433,14 +387,9 @@ public class PolygonMap : MonoBehaviour
 			{
 				corner.elevation = -elevationCurve.Evaluate(corner.elevation / minElevation);
 			}
-
-			//if (corner.isOcean || corner.isCoast)
-			//{
-			//	corner.elevation = 0;
-			//}
 		}
 
-		//Set the cell center elevation to be the average of its corners. Also, since the coastline is at elevation 0, we subtract a small value from all ocean cells
+		//Set the cell center elevation to be the average of its corners. Also, since the coastline is at elevation 0, if some ocean is greater than it, we override the value
 		float maxOceanElevation = -0.01f;
 
 		foreach (var center in cells)
@@ -464,20 +413,51 @@ public class PolygonMap : MonoBehaviour
 
 	private void AddRivers()
 	{
-		//Calculate Downslopes. For every corner, we point to the lowest neighbor. Note: it can point to itself.
-		foreach (var corner in corners)
+		List<CellCorner> springs = new List<CellCorner>();
+
+		//Define the min and max elevations from where springs for rivers can start
+		float minSpringElevation = 0.3f;
+		float maxSpringElevation = 0.9f;
+
+		//Get all corners that can possibly be a spring.
+		for (int i = 0; i < corners.Count; i++)
 		{
-			CellCorner lowestCorner = corner;
-
-			foreach (var neighbor in corner.neighborCorners)
+			if(corners[i].elevation >= minSpringElevation && corners[i].elevation <= maxSpringElevation && !corners[i].isWater)
 			{
-				if(neighbor.elevation <= lowestCorner.elevation)
-				{
-					lowestCorner = neighbor;
-				}
+				springs.Add(corners[i]);
 			}
+		}
 
-			corner.downslope = lowestCorner;
+		//Select some corners randomly from the previous list to be used as our springs
+		List<CellCorner> rivers = new List<CellCorner>();
+
+		springsSeed = useCustomSeeds ? springsSeed : Random.Range(0, 10000);
+		Random.InitState(springsSeed);
+
+		while (rivers.Count < numberOfSprings)
+		{
+			int id = Random.Range(0, springs.Count);
+			rivers.Add(springs[id]);
+			springs.RemoveAt(id);
+		}
+
+		//Assign the flow of the river for each edge using their downslope. Each time a edge is assigned as a river, the water volume is increased by 1, so if two rivers join together, the next edge will have a bigger volume of water
+		foreach (var river in rivers)
+		{
+			CellCorner currentRiverCorner = river;
+
+			while (true)
+			{
+				//If the current corner doesn't have a downslope, then we reached the coast
+				if (currentRiverCorner.downslopeCorner == null)
+					break;
+
+				//Increase the water volume for the downslope edge
+				currentRiverCorner.downslopeEdge.waterVolume++;
+
+				//Set the current river corner to be the dowsnlope, so we can keep going down until we reach the coast
+				currentRiverCorner = currentRiverCorner.downslopeCorner;
+			}
 		}
 	}
 	#endregion

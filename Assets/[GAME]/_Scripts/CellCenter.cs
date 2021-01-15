@@ -5,6 +5,6 @@ using UnityEngine;
 public class CellCenter : MapPoint
 {
 	public List<CellCenter> neighborCells = new List<CellCenter>();
-	public List<MapEdge> borderEdges = new List<MapEdge>();
+	public List<CellEdge> borderEdges = new List<CellEdge>();
 	public List<CellCorner> cellCorners = new List<CellCorner>();
 }
