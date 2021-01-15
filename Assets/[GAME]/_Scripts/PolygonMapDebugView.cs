@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using System;
+using TMPro;
+using System.Linq;
 
 public class PolygonMapDebugView : MonoBehaviour
 {
@@ -21,30 +23,28 @@ public class PolygonMapDebugView : MonoBehaviour
 		VoronoiCorners		= 1 << 1, //Same as above, but shifting 1 bit to the left, so the result will be "0010" (which is 2 in Decimal)
 		DelaunayEdges		= 1 << 2,
 		DelaunayCorners		= 1 << 3,
-		Cell				= 1 << 4,
-		Edge				= 1 << 5,
-		Corner				= 1 << 6,
-		Neighboors			= 1 << 7,
-		Borders				= 1 << 8,
-		Coast				= 1 << 9,
-		Slopes				= 1 << 10,
+		Selected			= 1 << 4,
+		Borders				= 1 << 5,
+		Coast				= 1 << 6,
+		Slopes				= 1 << 7,
 	}
 
     public PolygonMap generator;
-	public RawImage rend;
-	public Vector2Int resolution = new Vector2Int(512, 512);
 	public ComputeShader computeShader;
+	public RawImage rend;
+	public TMP_Text infoText;
 	[Header("Options")]
+	public Vector2Int resolution = new Vector2Int(512, 512);
 	public ViewBG background;
 	public Overlays overlays;
-	public int id = -1;
-	[Range(1, 10)] public int pointSize = 5;
+	public int selectedID = -1;
 
 	private Color[,] texColors;
 	private RenderTexture rt;
 	private int buildTextureKernelIndex;
 	private int findClosestCellKernelIndex;
 
+	private const int POINT_SIZE = 5;
 
 	private struct ColorData
 	{
@@ -92,6 +92,22 @@ public class PolygonMapDebugView : MonoBehaviour
 		}
 
 		rt?.Release();
+	}
+
+	private void Update()
+	{
+		if ((overlays & Overlays.Selected) != 0 && Input.GetMouseButtonDown(0) && RectTransformUtility.RectangleContainsScreenPoint(rend.rectTransform, Input.mousePosition))
+		{
+			Vector2 transformedPos = (Vector2)Input.mousePosition - rend.rectTransform.anchoredPosition;
+			transformedPos = transformedPos / rend.rectTransform.rect.size;
+			transformedPos = transformedPos * resolution;
+
+			int[] cellIDs = GetClosestCenterForPixels();
+
+			selectedID = cellIDs[(int)transformedPos.x + (int)transformedPos.y * resolution.y];
+
+			GenerateDebugTexture();
+		}
 	}
 
 	#region Generation
@@ -152,77 +168,157 @@ public class PolygonMapDebugView : MonoBehaviour
 			DrawSlopes();
 
 		//We want these to be over everything
-		if ((overlays & Overlays.Cell) != 0)
-			DrawCell();
-
-		if ((overlays & Overlays.Edge) != 0)
-			DrawEdge();
-
-		if ((overlays & Overlays.Corner) != 0)
-			DrawCorner();
-
-		if ((overlays & Overlays.Neighboors) != 0)
+		if ((overlays & Overlays.Selected) != 0)
+		{
 			DrawNeighboors();
+			infoText.text = GetInfoFromCell();
+		}
+		else
+		{
+			infoText.text = string.Empty;
+		}
 
 		//Create the texture and assign the texture using a Helper Compute Shader
 		ApplyChangesToTexture();
 	}
 	#endregion
 
-	#region Draw Views
-	private void DrawCell()
+	#region Helper Functions
+	private void ApplyChangesToTexture()
 	{
-		int[] cellIDs = GetClosestCenterForPixels();
+		//Create a new Buffer
+		ComputeBuffer shaderBuffer = new ComputeBuffer(resolution.x * resolution.y, sizeof(float) * 4 + sizeof(int) * 2); //4 because a color has 4 channels, 2 because the position has X and Y
+		ColorData[] colorData = new ColorData[resolution.x * resolution.y];
 
 		for (int x = 0; x < resolution.x; x++)
 		{
 			for (int y = 0; y < resolution.y; y++)
 			{
-				int currentCellID = cellIDs[x + y * resolution.y];
+				ColorData data = new ColorData() {
+					position = new Vector2Int(x, y),
+					color = texColors[x, y]
+				};
 
-				if(currentCellID == id)
-				{
-					texColors[x, y] = Color.magenta;
-				}
+				colorData[x + y * resolution.y] = data;
 			}
 		}
+
+		shaderBuffer.SetData(colorData);
+		computeShader.SetBuffer(buildTextureKernelIndex, "_ColorData", shaderBuffer);
+		computeShader.SetInt("_Resolution", resolution.x);
+
+		computeShader.Dispatch(buildTextureKernelIndex, resolution.x / 8, resolution.y / 8, 1);
+		shaderBuffer?.Dispose();
 	}
 
-	private void DrawEdge()
+	private Vector2Int MapGraphCoordToTextureCoords(float x, float y)
 	{
-		foreach (var edge in generator.edges)
-		{
-			if(edge.index == id)
-			{
-				Vector2Int posV0 = MapGraphCoordToTextureCoords(edge.v0.position.x, edge.v0.position.y);
-				Vector2Int posV1 = MapGraphCoordToTextureCoords(edge.v1.position.x, edge.v1.position.y);
+		Vector2Int pos = new Vector2Int() {
+			x = (int)(x / generator.size.x * resolution.x),
+			y = (int)(y / generator.size.y * resolution.y)
+		};
 
-				Vector2Int posD0 = MapGraphCoordToTextureCoords(edge.d0.position.x, edge.d0.position.y);
-				Vector2Int posD1 = MapGraphCoordToTextureCoords(edge.d1.position.x, edge.d1.position.y);
-
-				DrawLine(posV0.x, posV0.y, posV1.x, posV1.y, pointSize, Color.red);
-				DrawLine(posD0.x, posD0.y, posD1.x, posD1.y, pointSize, Color.green);
-
-				return;
-			}
-		}
+		return pos;
 	}
 
-	private void DrawCorner()
+	private Vector2 MapTextureCoordToGraphCoords(int x, int y)
 	{
-		foreach (var corner in generator.corners)
-		{
-			if(corner.index == id)
-			{
-				Vector2Int pos = MapGraphCoordToTextureCoords(corner.position.x, corner.position.y);
+		Vector2 pos = new Vector2() {
+			x = (x / (float)resolution.x) * generator.size.x,
+			y = (y / (float)resolution.y) * generator.size.y
+		};
 
-				DrawWireCircle(pos.x, pos.y, pointSize * 3, pointSize, Color.magenta);
-
-				return;
-			}
-		}
+		return pos;
 	}
 
+	private string GetInfoFromCell()
+	{
+		CellCenter c = generator.cells.First(x => x.index == selectedID);
+
+		string info = $"CELL:\n";
+
+		info += "\n- " + string.Join("\n- ",
+			$"id: {c.index}",
+			$"elevation: {c.elevation}"
+		);
+
+		info += "\n\nEDGES:\n";
+
+		foreach (var edge in c.borderEdges)
+		{
+			info += "\n- " + string.Join("\n",
+				$"id: {edge.index}",
+				$"V: {edge.v0.index}; {edge.v1.index}\tD: {edge.d0.index}; {edge.d1.index}"
+			);
+		}
+
+		info += "\n\nCORNERS:\n";
+
+		foreach (var corner in c.cellCorners)
+		{
+			info += "\n- " + string.Join("\n",
+				$"id: {corner.index}",
+				$"elevation: {corner.elevation}"
+			);
+		}
+
+		return info;
+	}
+
+	private CellCenter GetClosestCenterFromPoint(Vector2 point)
+	{
+		float smallestDistance = float.MaxValue;
+		CellCenter c = null;
+
+		foreach (var center in generator.cells)
+		{
+			float d = Vector2.Distance(point, center.position);
+			if (d < smallestDistance)
+			{
+				smallestDistance = d;
+				c = center;
+			}
+		}
+
+		return c;
+	}
+
+	private int[] GetClosestCenterForPixels()
+	{
+
+		//Send the data to the compute shader so the GPU can do the hard work
+		CellData[] cellData = new CellData[generator.cells.Count];
+		ComputeBuffer cellDataBuffer = new ComputeBuffer(generator.cells.Count, sizeof(int) * 2);
+		ComputeBuffer cellIdByPixeldBuffer = new ComputeBuffer(resolution.x * resolution.y, sizeof(int)); //This is the buffer we're gonna read from
+
+		for (int i = 0; i < cellData.Length; i++)
+		{
+			CellCenter c = generator.cells[i];
+			cellData[i] = new CellData() {
+				position = MapGraphCoordToTextureCoords(c.position.x, c.position.y)
+			};
+		}
+
+		cellDataBuffer.SetData(cellData);
+		cellIdByPixeldBuffer.SetData(new int[resolution.x * resolution.y]); //we pass an empty array, since we just want to retrieve this data
+		computeShader.SetBuffer(findClosestCellKernelIndex, "_CellData", cellDataBuffer);
+		computeShader.SetBuffer(findClosestCellKernelIndex, "_CellIDByPixel", cellIdByPixeldBuffer);
+		computeShader.SetInt("_Resolution", resolution.x);
+
+		computeShader.Dispatch(findClosestCellKernelIndex, resolution.x / 8, resolution.y / 8, 1);
+
+		//Get the result data back from the GPU
+		int[] centersIDs = new int[resolution.x * resolution.y];
+		cellIdByPixeldBuffer.GetData(centersIDs);
+
+		cellDataBuffer?.Dispose();
+		cellIdByPixeldBuffer?.Dispose();
+
+		return centersIDs;
+	}
+	#endregion
+
+	#region Draw Views
 	private void DrawVoronoiCells()
 	{
 		int[] cellIDs = GetClosestCenterForPixels();
@@ -253,7 +349,7 @@ public class PolygonMapDebugView : MonoBehaviour
 		foreach (var corner in generator.corners)
 		{
 			Vector2Int pos = MapGraphCoordToTextureCoords(corner.position.x, corner.position.y);
-			DrawCircle(pos.x, pos.y, pointSize, Color.blue);
+			DrawCircle(pos.x, pos.y, POINT_SIZE, Color.blue);
 		}
 	}
 
@@ -272,27 +368,27 @@ public class PolygonMapDebugView : MonoBehaviour
 		foreach (var center in generator.cells)
 		{
 			Vector2Int pos = MapGraphCoordToTextureCoords(center.position.x, center.position.y);
-			DrawCircle(pos.x, pos.y, pointSize, Color.red);
+			DrawCircle(pos.x, pos.y, POINT_SIZE, Color.red);
 		}
 	}
 
 	private void DrawNeighboors()
 	{
-		CellCenter c = generator.cells[id];
+		CellCenter c = generator.cells[selectedID];
 
 		Vector2Int pos = MapGraphCoordToTextureCoords(c.position.x, c.position.y);
-		DrawWireCircle(pos.x, pos.y, pointSize * 3, 2, Color.green);
+		DrawWireCircle(pos.x, pos.y, POINT_SIZE * 3, 2, Color.green);
 
 		for (int i = 0; i < c.neighborCells.Count; i++)
 		{
 			pos = MapGraphCoordToTextureCoords(c.neighborCells[i].position.x, c.neighborCells[i].position.y);
-			DrawWireCircle(pos.x, pos.y, pointSize * 2, 2, Color.magenta);
+			DrawWireCircle(pos.x, pos.y, POINT_SIZE * 2, 2, Color.magenta);
 		}
 
 		for (int i = 0; i < c.cellCorners.Count; i++)
 		{
 			pos = MapGraphCoordToTextureCoords(c.cellCorners[i].position.x, c.cellCorners[i].position.y);
-			DrawWireCircle(pos.x, pos.y, pointSize * 2, 2, Color.yellow);
+			DrawWireCircle(pos.x, pos.y, POINT_SIZE * 2, 2, Color.yellow);
 		}
 
 		for (int i = 0; i < c.borderEdges.Count; i++)
@@ -331,7 +427,7 @@ public class PolygonMapDebugView : MonoBehaviour
 			if (corner.isBorder)
 			{
 				Vector2Int pos = MapGraphCoordToTextureCoords(corner.position.x, corner.position.y);
-				DrawCircle(pos.x, pos.y, pointSize * 2, borderCorner);
+				DrawCircle(pos.x, pos.y, POINT_SIZE * 2, borderCorner);
 			}
 		}
 	}
@@ -413,7 +509,7 @@ public class PolygonMapDebugView : MonoBehaviour
 			if (corner.isCoast)
 			{
 				Vector2Int pos = MapGraphCoordToTextureCoords(corner.position.x, corner.position.y);
-				DrawWireCircle(pos.x, pos.y, pointSize, 2, Color.white);
+				DrawWireCircle(pos.x, pos.y, POINT_SIZE, 2, Color.white);
 			}
 		}
 	}
@@ -461,60 +557,13 @@ public class PolygonMapDebugView : MonoBehaviour
 			Vector2Int pos = MapGraphCoordToTextureCoords(corner.position.x, corner.position.y);
 			Vector2Int pos2 = MapGraphCoordToTextureCoords(corner.downslope.position.x, corner.downslope.position.y);
 			Vector2 dir = pos2 - pos;
-			DrawArrow(pos.x, pos.y, dir, dir.magnitude * 0.4f, pointSize / 3, Color.red);
+			DrawArrow(pos.x, pos.y, dir, dir.magnitude * 0.4f, POINT_SIZE / 3, Color.red);
 		}
 	}
 
 	#endregion
 
-	#region Helper Functions
-	private void ApplyChangesToTexture()
-	{
-		//Create a new Buffer
-		ComputeBuffer shaderBuffer = new ComputeBuffer(resolution.x * resolution.y, sizeof(float) * 4 + sizeof(int) * 2); //4 because a color has 4 channels, 2 because the position has X and Y
-		ColorData[] colorData = new ColorData[resolution.x * resolution.y];
-
-		for (int x = 0; x < resolution.x; x++)
-		{
-			for (int y = 0; y < resolution.y; y++)
-			{
-				ColorData data = new ColorData() {
-					position = new Vector2Int(x, y),
-					color = texColors[x, y]
-				};
-
-				colorData[x + y * resolution.y] = data;
-			}
-		}
-
-		shaderBuffer.SetData(colorData);
-		computeShader.SetBuffer(buildTextureKernelIndex, "_ColorData", shaderBuffer);
-		computeShader.SetInt("_Resolution", resolution.x);
-
-		computeShader.Dispatch(buildTextureKernelIndex, resolution.x / 8, resolution.y / 8, 1);
-		shaderBuffer?.Dispose();
-	}
-
-	private Vector2Int MapGraphCoordToTextureCoords(float x, float y)
-	{
-		Vector2Int pos = new Vector2Int() {
-			x = (int)(x / generator.size.x * resolution.x),
-			y = (int)(y / generator.size.y * resolution.y)
-		};
-
-		return pos;
-	}
-
-	private Vector2 MapTextureCoordToGraphCoords(int x, int y)
-	{
-		Vector2 pos = new Vector2() {
-			x = (x / (float)resolution.x) * generator.size.x,
-			y = (y / (float)resolution.y) * generator.size.y
-		};
-
-		return pos;
-	}
-
+	#region Draw Shapes
 	private void DrawSquare(int x, int y, int size, Color c)
 	{
 		Rect textureBounds = Rect.MinMaxRect(0, 0, resolution.x, resolution.y);
@@ -632,58 +681,6 @@ public class PolygonMapDebugView : MonoBehaviour
 	{
 		DrawArrow(x, y, (int)(x + dir.normalized.x * lenght), (int)(y + dir.normalized.y * lenght), thickness, c);
 	}
-
-	private CellCenter GetClosestCenterFromPoint(Vector2 point)
-	{
-		float smallestDistance = float.MaxValue;
-		CellCenter c = null;
-
-		foreach (var center in generator.cells)
-		{
-			float d = Vector2.Distance(point, center.position);
-			if (d < smallestDistance)
-			{
-				smallestDistance = d;
-				c = center;
-			}
-		}
-
-		return c;
-	}
-
-	private int[] GetClosestCenterForPixels()
-	{
-
-		//Send the data to the compute shader so the GPU can do the hard work
-		CellData[] cellData = new CellData[generator.cells.Count];
-		ComputeBuffer cellDataBuffer = new ComputeBuffer(generator.cells.Count, sizeof(int) * 2);
-		ComputeBuffer cellIdByPixeldBuffer = new ComputeBuffer(resolution.x * resolution.y, sizeof(int)); //This is the buffer we're gonna read from
-
-		for (int i = 0; i < cellData.Length; i++)
-		{
-			CellCenter c = generator.cells[i];
-			cellData[i] = new CellData() {
-				position = MapGraphCoordToTextureCoords(c.position.x, c.position.y)
-			};
-		}
-
-		cellDataBuffer.SetData(cellData);
-		cellIdByPixeldBuffer.SetData(new int[resolution.x * resolution.y]); //we pass an empty array, since we just want to retrieve this data
-		computeShader.SetBuffer(findClosestCellKernelIndex, "_CellData", cellDataBuffer);
-		computeShader.SetBuffer(findClosestCellKernelIndex, "_CellIDByPixel", cellIdByPixeldBuffer);
-		computeShader.SetInt("_Resolution", resolution.x);
-
-		computeShader.Dispatch(findClosestCellKernelIndex, resolution.x / 8, resolution.y / 8, 1);
-
-		//Get the result data back from the GPU
-		int[] centersIDs = new int[resolution.x * resolution.y];
-		cellIdByPixeldBuffer.GetData(centersIDs);
-
-		cellDataBuffer?.Dispose();
-		cellIdByPixeldBuffer?.Dispose();
-
-		return centersIDs;
-	}
 	#endregion
 
 	private void OnValidate()
@@ -691,11 +688,11 @@ public class PolygonMapDebugView : MonoBehaviour
 		if (generator == null)
 			return;
 
-		if (id < 0)
-			id = 0;
+		if (selectedID < 0)
+			selectedID = 0;
 
-		if (id >= generator.polygonCount)
-			id = generator.polygonCount - 1;
+		if (selectedID >= generator.polygonCount)
+			selectedID = generator.polygonCount - 1;
 
 		if (Application.isPlaying)
 			GenerateDebugTexture();

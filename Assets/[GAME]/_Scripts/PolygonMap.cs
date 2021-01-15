@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using NaughtyAttributes;
 using csDelaunay; //The Voronoi Library
+using System.Linq;
 
 public class PolygonMap : MonoBehaviour
 {
@@ -25,7 +26,7 @@ public class PolygonMap : MonoBehaviour
 
 	//Graphs. Here are the info necessary to build both the Voronoi Graph than the Delaunay triangulation Graph
 	public List<CellCenter> cells = new List<CellCenter>(); //The center of each cell makes up a corner for the Delaunay triangles
-	public List<CellCorner> corners = new List<CellCorner>();
+	public List<CellCorner> corners = new List<CellCorner>(); //The corners of the cells. Also the center of the Delaunay triangles
 	public List<MapEdge> edges = new List<MapEdge>(); //We use a single object here, but we are representing two edges for each object (the voronoi edge and the Delaunay Edge)
 
 	//Events
@@ -104,7 +105,6 @@ public class PolygonMap : MonoBehaviour
 		Voronoi voronoi = new Voronoi(points, bounds, relaxation);
 
 		//Cell centers
-		Dictionary<Vector2, CellCenter> centersLookup = new Dictionary<Vector2, CellCenter>(); //Quick way to access a CellCenter through its position
 		foreach (var site in voronoi.SitesIndexedByLocation)
 		{
 			CellCenter c = new CellCenter();
@@ -112,45 +112,37 @@ public class PolygonMap : MonoBehaviour
 			c.position = site.Key;
 
 			cells.Add(c);
-			centersLookup.Add(c.position, c);
 		}
 
 		//Cell Corners
-		Dictionary<Vector2, CellCorner> cornersLookup = new Dictionary<Vector2, CellCorner>(); //Quick way to access a Cell Corner thorugh its position
 		foreach (var edge in voronoi.Edges)
 		{
 			//If the edge doesn't have clipped ends, it was not withing bounds
 			if (edge.ClippedEnds == null)
 				continue;
-
-			if (!cornersLookup.ContainsKey(edge.ClippedEnds[LR.LEFT]))
+			
+			if(!corners.Any(x => x.position == edge.ClippedEnds[LR.LEFT]))
 			{
-				CellCorner c1 = new CellCorner();
-				c1.position = edge.ClippedEnds[LR.LEFT];
+				CellCorner c = new CellCorner();
+				c.index = corners.Count;
+				c.position = edge.ClippedEnds[LR.LEFT];
+				c.isBorder = c.position.x == 0 || c.position.x == size.x || c.position.y == 0 || c.position.y == size.y;
 
-				cornersLookup.Add(c1.position, c1);
+				corners.Add(c);
 			}
 
-			if (!cornersLookup.ContainsKey(edge.ClippedEnds[LR.RIGHT]))
+			if (!corners.Any(x => x.position == edge.ClippedEnds[LR.RIGHT]))
 			{
-				CellCorner c2 = new CellCorner();
-				c2.position = edge.ClippedEnds[LR.RIGHT];
+				CellCorner c = new CellCorner();
+				c.index = corners.Count;
+				c.position = edge.ClippedEnds[LR.RIGHT];
+				c.isBorder = c.position.x == 0 || c.position.x == size.x || c.position.y == 0 || c.position.y == size.y;
 
-				cornersLookup.Add(c2.position, c2);
+				corners.Add(c);
 			}
 		}
 
-		foreach (var corner in cornersLookup)
-		{
-			CellCorner c = corner.Value;
-			c.index = corners.Count;
-			c.position = corner.Key;
-			c.isBorder = c.position.x == 0 || c.position.x == size.x || c.position.y == 0 || c.position.y == size.y;
-
-			corners.Add(c);
-		}
-
-		//Define a local helper function to help with the loop below
+		//Define some local helper functions to help with the loop below
 		void AddPointToPointList<T>(List<T> list, T point) where T : MapPoint
 		{
 			if (!list.Contains(point))
@@ -167,12 +159,12 @@ public class PolygonMap : MonoBehaviour
 			edge.index = edges.Count;
 
 			//Set the voronoi edge
-			edge.v0 = cornersLookup[voronoiEdge.ClippedEnds[LR.LEFT]];
-			edge.v1 = cornersLookup[voronoiEdge.ClippedEnds[LR.RIGHT]];
+			edge.v0 = corners.First(x => x.position == voronoiEdge.ClippedEnds[LR.LEFT]);
+			edge.v1 = corners.First(x => x.position == voronoiEdge.ClippedEnds[LR.RIGHT]);
 
 			//Set the Delaunay edge
-			edge.d0 = centersLookup[voronoiEdge.LeftSite.Coord];
-			edge.d1 = centersLookup[voronoiEdge.RightSite.Coord];
+			edge.d0 = cells.First(x => x.position == voronoiEdge.LeftSite.Coord);
+			edge.d1 = cells.First(x => x.position == voronoiEdge.RightSite.Coord);
 
 			edges.Add(edge);
 
@@ -189,8 +181,8 @@ public class PolygonMap : MonoBehaviour
 			AddPointToPointList(edge.d1.neighborCells, edge.d0);
 
 			//Set the relationship between the CORNERS connected to this edge
-			AddPointToPointList(edge.v0.neighboorCorners, edge.v1);
-			AddPointToPointList(edge.v1.neighboorCorners, edge.v0);
+			AddPointToPointList(edge.v0.neighborCorners, edge.v1);
+			AddPointToPointList(edge.v1.neighborCorners, edge.v0);
 
 			//Set the relationship of the CORNERS connected to this edge and the CELL CENTERS connected to this edge
 			AddPointToPointList(edge.d0.cellCorners, edge.v0);
@@ -263,7 +255,7 @@ public class PolygonMap : MonoBehaviour
 			center.isWater = center.isOcean || numWater >= center.cellCorners.Count * LAKE_THRESHOLD;
 		}
 
-		//Every cell around a border must be a ocean too, and we loop thought the neighboors until can't find more water (at which case, the queue would be empty)
+		//Every cell around a border must be a ocean too, and we loop thought the neighbors until can't find more water (at which case, the queue would be empty)
 		while (queue.Count > 0)
 		{
 			CellCenter c = queue.Dequeue();
@@ -273,12 +265,12 @@ public class PolygonMap : MonoBehaviour
 				if (n.isWater && !n.isOcean)
 				{
 					n.isOcean = true;
-					queue.Enqueue(n); //If this neighboor is a ocean, we add it to the queue so wwe can check its neighboors
+					queue.Enqueue(n); //If this neighbor is a ocean, we add it to the queue so wwe can check its neighbors
 				}
 			}
 		}
 
-		//Set the Coast cells based on the neighboors. If a cell has at least one ocean and one land neighboor, then the cell is a coast
+		//Set the Coast cells based on the neighbors. If a cell has at least one ocean and one land neighbor, then the cell is a coast
 		foreach (var cell in cells)
 		{
 			int numOcean = 0;
@@ -320,6 +312,7 @@ public class PolygonMap : MonoBehaviour
 		{
 			if (corner.isCoast)
 			{
+				corner.elevation = 0;
 				queue.Enqueue(corner);
 			}
 			else
@@ -335,24 +328,24 @@ public class PolygonMap : MonoBehaviour
 		{
 			CellCorner corner = queue.Dequeue();
 
-			//Every step up we add a very low elevation value for water and a full 1 for land. These values are just for reference, since we gonna rescale them later
-			foreach (var neighboor in corner.neighboorCorners)
+			//Every step up we add a very low elevation value for water and a full 1 for land. These values are just for reference, since we gonna normalize them later
+			foreach (var neighbor in corner.neighborCorners)
 			{
 				float newElevation = 0.01f + corner.elevation;
 
 				//If this corner is a land, we add 1 on elevation
-				if(!corner.isWater && !neighboor.isWater)
+				if (!corner.isWater && !neighbor.isWater)
 				{
 					newElevation += 1;
 				}
 
-				//If the new elevation value is lower than a previous set elevation, change the elevation and re-add it to the queue so we can process its neighboors
-				if(newElevation < neighboor.elevation)
+				//If the new elevation value is lower than a previous set elevation, change the elevation and re-add it to the queue so we can process its neighbors
+				if (newElevation < neighbor.elevation)
 				{
-					neighboor.elevation = newElevation;
-					queue.Enqueue(neighboor);
+					neighbor.elevation = newElevation;
+					queue.Enqueue(neighbor);
 
-					if(newElevation > highestElevation)
+					if (newElevation > highestElevation)
 					{
 						highestElevation = newElevation;
 					}
@@ -360,10 +353,133 @@ public class PolygonMap : MonoBehaviour
 			}
 		}
 
+		//===
+
+		//List<CellCorner> queue = new List<CellCorner>(); //We have to use a List<T> instead of a Queue<T> because we need to add itens both at the begging and a the end of the list
+		//float minElevation = 1, maxElevation = 1;
+
+		////Find all coast corners and assign their elevation to 0
+		//foreach (var corner in corners)
+		//{
+		//	if (corner.isCoast)
+		//	{
+		//		queue.Add(corner);
+		//		corner.elevation = 0;
+		//	}
+		//	else
+		//	{
+		//		corner.elevation = Mathf.Infinity;
+		//	}
+		//}
+
+		////Define some helper functions to help with the loop below
+		//bool IsCellLake(CellCenter c)
+		//{
+		//	return c.isWater && !c.isOcean;
+		//}
+
+		//bool IsEdgeLake(MapEdge e)
+		//{
+		//	return IsCellLake(e.d0) || IsCellLake(e.d1);
+		//}
+
+		//while (queue.Count > 0)
+		//{
+		//	CellCorner currentCorner = queue[0]; //Get the fisrt item on the list
+		//	queue.RemoveAt(0); //Remove the item from the list
+		//	int offset = Random.Range(0, currentCorner.connectedEdges.Count); //Add a random offset to the iterator
+
+		//	for (int i = 0; i < currentCorner.connectedEdges.Count; i++)
+		//	{
+		//		MapEdge e = currentCorner.connectedEdges[(i + offset) % currentCorner.connectedEdges.Count]; //uses the offset to start at a random edge, but still circulate through all of them
+		//		CellCorner neighbor = e.v0 == currentCorner ? e.v1 : e.v0; //Get the corner that is part of this edge and opposite of the current corner
+		//		float newElevation = (IsEdgeLake(e) ? 0 : 1) + currentCorner.elevation;
+
+		//		//If the neighboor has a higher elevation than the calculated one, we have to change the elevation
+		//		if (newElevation < neighbor.elevation)
+		//		{
+		//			neighbor.elevation = newElevation;
+		//			neighbor.downslope = currentCorner; //Since this elevation is the corner elevation + (0 || 1), that means this corner is either higher or the same height as the current corner
+		//			Debug.Log($"a{neighbor.index} > b{currentCorner.index}");
+
+		//			//If this corner was a lake, we have to revisit it again to guarantee that all edges of a lake has the same elevation
+		//			if (IsEdgeLake(e))
+		//			{
+		//				queue.Insert(0, neighbor);
+		//			}
+		//			else
+		//			{
+		//				queue.Add(neighbor);
+		//			}
+		//		}
+		//	}
+
+		//===
+
+		//Queue<CellCorner> queue = new Queue<CellCorner>();
+
+		////Find all coast corners and assign their elevation to 0
+		//foreach (var corner in corners)
+		//{
+		//	if (corner.isCoast)
+		//	{
+		//		queue.Enqueue(corner);
+		//		corner.elevation = 0;
+		//	}
+		//	else
+		//	{
+		//		corner.elevation = Mathf.Infinity;
+		//	}
+		//}
+
+		//float highestElevation = 0;
+
+		//while (queue.Count > 0)
+		//{
+		//	CellCorner corner = queue.Dequeue();
+
+		//	foreach (var neighbor in corner.neighborCorners)
+		//	{
+		//		if (neighbor.isCoast)
+		//		{
+		//			continue;
+		//		}
+
+		//		if (neighbor.isOcean)
+		//		{
+		//			neighbor.elevation = -1;
+		//			continue;
+		//		}
+		//		float newElevation = corner.elevation + (neighbor.isWater ? 0 : 1);
+
+		//		if (newElevation < neighbor.elevation)
+		//		{
+		//			Debug.Log(neighbor.index);
+		//			neighbor.elevation = newElevation;
+		//			neighbor.downslope = corner;
+
+		//			if (corner.isWater)
+		//			{
+		//				queue.Enqueue(neighbor);
+		//			}
+
+		//			if(highestElevation < newElevation)
+		//			{
+		//				highestElevation = newElevation;
+		//			}
+		//		}
+		//	}
+		//}
+
 		//Normalize the elevations so we have a range from 0 to 1
 		foreach (var corner in corners)
 		{
 			corner.elevation = elevationCurve.Evaluate(Mathf.InverseLerp(0, highestElevation, corner.elevation));
+
+			if(corner.isOcean || corner.isCoast)
+			{
+				corner.elevation = 0;
+			}
 		}
 
 		//Set the cell center elevation to be the average of its corners. Also, since the coastline is at elevation 0, we subtract a small value from all ocean cells
@@ -380,7 +496,7 @@ public class PolygonMap : MonoBehaviour
 
 			center.elevation = sumElevations / center.cellCorners.Count;
 
-			if(center.isOcean && center.elevation > maxOceanElevation)
+			if (center.isOcean && center.elevation > maxOceanElevation)
 			{
 				center.elevation = maxOceanElevation;
 			}
@@ -389,16 +505,16 @@ public class PolygonMap : MonoBehaviour
 
 	private void AddRivers()
 	{
-		//Calculate Downslopes. For every corner, we point to the lowest neighboor. Note: it can point to itself.
+		//Calculate Downslopes. For every corner, we point to the lowest neighbor. Note: it can point to itself.
 		foreach (var corner in corners)
 		{
 			CellCorner lowestCorner = corner;
 
-			foreach (var neighboor in corner.neighboorCorners)
+			foreach (var neighbor in corner.neighborCorners)
 			{
-				if(neighboor.elevation <= lowestCorner.elevation)
+				if(neighbor.elevation <= lowestCorner.elevation)
 				{
-					lowestCorner = neighboor;
+					lowestCorner = neighbor;
 				}
 			}
 
