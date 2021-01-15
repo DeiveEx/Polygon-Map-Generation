@@ -521,6 +521,8 @@ public class PolygonMapDebugView : MonoBehaviour
 		Color high = Color.white;
 		Color water = Color.blue * 0.5f;
 		water.a = 1;
+		Color waterDeep = Color.blue * 0.1f;
+		waterDeep.a = 1;
 
 		for (int x = 0; x < resolution.x; x++)
 		{
@@ -530,7 +532,7 @@ public class PolygonMapDebugView : MonoBehaviour
 
 				if (c.elevation < 0)
 				{
-					texColors[x, y] = water;
+					texColors[x, y] = Color.Lerp(waterDeep, water, 1 + c.elevation);
 				}
 				else
 				{

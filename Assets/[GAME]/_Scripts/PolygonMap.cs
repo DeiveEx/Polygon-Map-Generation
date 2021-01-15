@@ -67,7 +67,7 @@ public class PolygonMap : MonoBehaviour
 		AssignWater(); //He is where we define the general shape of the island
 		AssignOceanCoastAndLand();
 		AssignElevations(); //For this case, we are making that the farthest from the coast, the higher the elevation
-		AddRivers();
+		//AddRivers();
 
 		//Execute an event saying we finished our generation
 		onMapGenerated?.Invoke();
@@ -305,165 +305,47 @@ public class PolygonMap : MonoBehaviour
 
 	private void AssignElevations()
 	{
-		Queue<CellCorner> queue = new Queue<CellCorner>();
-
-		//Find all coast corners. We set the coast as elevation 0, and everything else as elevation infinity. Later we gonna work our way up the coast, reassigning the elevation of each corner.
-		foreach (var corner in corners)
-		{
-			if (corner.isCoast)
-			{
-				corner.elevation = 0;
-				queue.Enqueue(corner);
-			}
-			else
-			{
-				corner.elevation = float.PositiveInfinity;
-			}
-		}
-
-		float highestElevation = 0;
-
-		//Travese through the map and set the elevation at each point. The farther away from the border, the highest the elevation. This guarantees that rivers always hava a way down to the ocean by going downhill
-		while (queue.Count > 0)
-		{
-			CellCorner corner = queue.Dequeue();
-
-			//Every step up we add a very low elevation value for water and a full 1 for land. These values are just for reference, since we gonna normalize them later
-			foreach (var neighbor in corner.neighborCorners)
-			{
-				float newElevation = 0.01f + corner.elevation;
-
-				//If this corner is a land, we add 1 on elevation
-				if (!corner.isWater && !neighbor.isWater)
-				{
-					newElevation += 1;
-				}
-
-				//If the new elevation value is lower than a previous set elevation, change the elevation and re-add it to the queue so we can process its neighbors
-				if (newElevation < neighbor.elevation)
-				{
-					neighbor.elevation = newElevation;
-					queue.Enqueue(neighbor);
-
-					if (newElevation > highestElevation)
-					{
-						highestElevation = newElevation;
-					}
-				}
-			}
-		}
-
-		//===
-
-		//List<CellCorner> queue = new List<CellCorner>(); //We have to use a List<T> instead of a Queue<T> because we need to add itens both at the begging and a the end of the list
-		//float minElevation = 1, maxElevation = 1;
-
-		////Find all coast corners and assign their elevation to 0
-		//foreach (var corner in corners)
-		//{
-		//	if (corner.isCoast)
-		//	{
-		//		queue.Add(corner);
-		//		corner.elevation = 0;
-		//	}
-		//	else
-		//	{
-		//		corner.elevation = Mathf.Infinity;
-		//	}
-		//}
-
-		////Define some helper functions to help with the loop below
-		//bool IsCellLake(CellCenter c)
-		//{
-		//	return c.isWater && !c.isOcean;
-		//}
-
-		//bool IsEdgeLake(MapEdge e)
-		//{
-		//	return IsCellLake(e.d0) || IsCellLake(e.d1);
-		//}
-
-		//while (queue.Count > 0)
-		//{
-		//	CellCorner currentCorner = queue[0]; //Get the fisrt item on the list
-		//	queue.RemoveAt(0); //Remove the item from the list
-		//	int offset = Random.Range(0, currentCorner.connectedEdges.Count); //Add a random offset to the iterator
-
-		//	for (int i = 0; i < currentCorner.connectedEdges.Count; i++)
-		//	{
-		//		MapEdge e = currentCorner.connectedEdges[(i + offset) % currentCorner.connectedEdges.Count]; //uses the offset to start at a random edge, but still circulate through all of them
-		//		CellCorner neighbor = e.v0 == currentCorner ? e.v1 : e.v0; //Get the corner that is part of this edge and opposite of the current corner
-		//		float newElevation = (IsEdgeLake(e) ? 0 : 1) + currentCorner.elevation;
-
-		//		//If the neighboor has a higher elevation than the calculated one, we have to change the elevation
-		//		if (newElevation < neighbor.elevation)
-		//		{
-		//			neighbor.elevation = newElevation;
-		//			neighbor.downslope = currentCorner; //Since this elevation is the corner elevation + (0 || 1), that means this corner is either higher or the same height as the current corner
-		//			Debug.Log($"a{neighbor.index} > b{currentCorner.index}");
-
-		//			//If this corner was a lake, we have to revisit it again to guarantee that all edges of a lake has the same elevation
-		//			if (IsEdgeLake(e))
-		//			{
-		//				queue.Insert(0, neighbor);
-		//			}
-		//			else
-		//			{
-		//				queue.Add(neighbor);
-		//			}
-		//		}
-		//	}
-
-		//===
-
 		//Queue<CellCorner> queue = new Queue<CellCorner>();
 
-		////Find all coast corners and assign their elevation to 0
+		////Find all coast corners. We set the coast as elevation 0, and everything else as elevation infinity. Later we gonna work our way up the coast, reassigning the elevation of each corner.
 		//foreach (var corner in corners)
 		//{
 		//	if (corner.isCoast)
 		//	{
-		//		queue.Enqueue(corner);
 		//		corner.elevation = 0;
+		//		queue.Enqueue(corner);
 		//	}
 		//	else
 		//	{
-		//		corner.elevation = Mathf.Infinity;
+		//		corner.elevation = float.PositiveInfinity;
 		//	}
 		//}
 
 		//float highestElevation = 0;
 
+		////Travese through the map and set the elevation at each point. The farther away from the border, the highest the elevation. This guarantees that rivers always hava a way down to the ocean by going downhill
 		//while (queue.Count > 0)
 		//{
 		//	CellCorner corner = queue.Dequeue();
 
+		//	//Every step up we add a very low elevation value for water and a full 1 for land. These values are just for reference, since we gonna normalize them later
 		//	foreach (var neighbor in corner.neighborCorners)
 		//	{
-		//		if (neighbor.isCoast)
+		//		float newElevation = 0.01f + corner.elevation;
+
+		//		//If this corner is a land, we add 1 on elevation
+		//		if (!corner.isWater && !neighbor.isWater)
 		//		{
-		//			continue;
+		//			newElevation += 1;
 		//		}
 
-		//		if (neighbor.isOcean)
-		//		{
-		//			neighbor.elevation = -1;
-		//			continue;
-		//		}
-		//		float newElevation = corner.elevation + (neighbor.isWater ? 0 : 1);
-
+		//		//If the new elevation value is lower than a previous set elevation, change the elevation and re-add it to the queue so we can process its neighbors
 		//		if (newElevation < neighbor.elevation)
 		//		{
-		//			Debug.Log(neighbor.index);
 		//			neighbor.elevation = newElevation;
-		//			neighbor.downslope = corner;
+		//			queue.Enqueue(neighbor);
 
-		//			if (corner.isWater)
-		//			{
-		//				queue.Enqueue(neighbor);
-		//			}
-
-		//			if(highestElevation < newElevation)
+		//			if (newElevation > highestElevation)
 		//			{
 		//				highestElevation = newElevation;
 		//			}
@@ -471,15 +353,91 @@ public class PolygonMap : MonoBehaviour
 		//	}
 		//}
 
-		//Normalize the elevations so we have a range from 0 to 1
+		//===
+
+		List<CellCorner> queue = new List<CellCorner>(); //We have to use a List<T> instead of a Queue<T> because we need to add itens both at the begging and a the end of the list
+		float minElevation = 1, maxElevation = 1;
+
+		//Find all coast corners and assign their elevation to 0
 		foreach (var corner in corners)
 		{
-			corner.elevation = elevationCurve.Evaluate(Mathf.InverseLerp(0, highestElevation, corner.elevation));
-
-			if(corner.isOcean || corner.isCoast)
+			if (corner.isCoast)
 			{
+				queue.Add(corner);
 				corner.elevation = 0;
 			}
+			else
+			{
+				corner.elevation = Mathf.Infinity;
+			}
+		}
+
+		//Define some helper functions to help with the loop below
+		bool IsCellLake(CellCenter c)
+		{
+			return c.isWater && !c.isOcean;
+		}
+
+		bool IsEdgeLake(MapEdge e)
+		{
+			return IsCellLake(e.d0) || IsCellLake(e.d1);
+		}
+
+		while (queue.Count > 0)
+		{
+			CellCorner currentCorner = queue[0]; //Get the fisrt item on the list
+			queue.RemoveAt(0); //Remove the item from the list
+			int offset = Random.Range(0, currentCorner.connectedEdges.Count); //Add a random offset to the iterator
+
+			for (int i = 0; i < currentCorner.connectedEdges.Count; i++)
+			{
+				MapEdge e = currentCorner.connectedEdges[(i + offset) % currentCorner.connectedEdges.Count]; //uses the offset to start at a random edge, but still circulate through all of them
+				CellCorner neighbor = e.v0 == currentCorner ? e.v1 : e.v0; //Get the corner that is part of this edge and opposite of the current corner
+				float newElevation = (IsEdgeLake(e) ? 0 : 1) + currentCorner.elevation;
+
+				//If the neighboor has a higher elevation than the calculated one, we have to change the elevation (in other words, we always use the lowest calculated elevation value)
+				if (newElevation < neighbor.elevation)
+				{
+					neighbor.elevation = newElevation;
+					neighbor.downslope = currentCorner; //Since this elevation is (corner elevation + (0 || 1)), that means this corner is either higher or the same height as the current corner, and so we can set the parent corner as the downslope
+
+					//Update the min/max elevations
+					if (neighbor.isOcean && newElevation > minElevation)
+						minElevation = newElevation;
+
+					if (!neighbor.isOcean && newElevation > maxElevation)
+						maxElevation = newElevation;
+
+					//If this corner was a lake, we have to revisit it again to guarantee that all edges of a lake has the same elevation
+					if (IsEdgeLake(e))
+					{
+						queue.Insert(0, neighbor);
+					}
+					else
+					{
+						queue.Add(neighbor);
+					}
+				}
+			}
+		}
+
+		//Normalize the elevations so we have a range from 0 to 1
+		Debug.Log($"Max: {maxElevation}; Min: {minElevation}");
+		foreach (var corner in corners)
+		{
+			if (!corner.isOcean)
+			{
+				corner.elevation = elevationCurve.Evaluate(corner.elevation / maxElevation);
+			}
+			else
+			{
+				corner.elevation = -elevationCurve.Evaluate(corner.elevation / minElevation);
+			}
+
+			//if (corner.isOcean || corner.isCoast)
+			//{
+			//	corner.elevation = 0;
+			//}
 		}
 
 		//Set the cell center elevation to be the average of its corners. Also, since the coastline is at elevation 0, we subtract a small value from all ocean cells
@@ -496,6 +454,7 @@ public class PolygonMap : MonoBehaviour
 
 			center.elevation = sumElevations / center.cellCorners.Count;
 
+			//make sure that ocean cells won't be on a higher elevation than the coast
 			if (center.isOcean && center.elevation > maxOceanElevation)
 			{
 				center.elevation = maxOceanElevation;
