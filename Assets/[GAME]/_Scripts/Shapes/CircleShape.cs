@@ -5,6 +5,7 @@ using UnityEngine;
 [CreateAssetMenu(menuName = "Custom/Map Shape/Circle Shape")]
 public class CircleShape : IslandShape
 {
+	[Range(0, 1)]
 	public float size = 1;
 
 	public override bool IsPointInsideShape(Vector2 point, Vector2 mapSize, int seed = 0)
@@ -19,6 +20,6 @@ public class CircleShape : IslandShape
 
 		float value = Vector2.Distance(Vector2.zero, normalizedPosition);
 
-		return value < .9f;
+		return value < size;
 	}
 }

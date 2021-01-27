@@ -47,6 +47,8 @@ public class PolygonMap : MonoBehaviour
 	public Shape islandShape;
 	public AnimationCurve elevationCurve = AnimationCurve.Linear(0, 0, 1, 1);
 	public IslandShape shape;
+	public bool singleIsland;
+	public int minIslandSize;
 
 	[Header("Rivers")]
 	public int springsSeed;
@@ -58,6 +60,7 @@ public class PolygonMap : MonoBehaviour
 	public List<CellCenter> cells = new List<CellCenter>(); //The center of each cell makes up a corner for the Delaunay triangles
 	public List<CellCorner> corners = new List<CellCorner>(); //The corners of the cells. Also the center of the Delaunay triangles
 	public List<CellEdge> edges = new List<CellEdge>(); //We use a single object here, but we are representing two edges for each object (the voronoi edge and the Delaunay Edge)
+	public List<List<CellCenter>> islands = new List<List<CellCenter>>();
 
 	//Events
 	public event System.Action onMapGenerated;
@@ -95,6 +98,8 @@ public class PolygonMap : MonoBehaviour
 		GenerateGraphs(points);
 		AssignWater(); //He is where we define the general shape of the island
 		AssignOceanCoastAndLand();
+		DetectIslands();
+		AssignOceanCoastAndLandCorners();
 		AssignElevations(); //For this case, we are making that the farthest from the coast, the higher the elevation
 		AddRivers();
 		AssignMoisture();
@@ -299,7 +304,10 @@ public class PolygonMap : MonoBehaviour
 
 			cell.isCoast = numOcean > 0 && numLand > 0;
 		}
+	}
 
+	private void AssignOceanCoastAndLandCorners()
+	{
 		//Set the corners attributes based on the connected cells. If all connected cells are ocean, then the corner is ocean. If all cells are land, then the corner is land. Otherwise the corner is a coast
 		foreach (var corner in corners)
 		{
@@ -315,6 +323,86 @@ public class PolygonMap : MonoBehaviour
 			corner.isOcean = numOcean == corner.touchingCells.Count;
 			corner.isCoast = numOcean > 0 && numLand > 0;
 			corner.isWater = corner.isBorder || numLand != corner.touchingCells.Count && !corner.isCoast;
+		}
+	}
+
+	private void DetectIslands()
+	{
+		List<CellCenter> land = new List<CellCenter>();
+
+		foreach (var cell in cells)
+		{
+			if (cell.isOcean)
+			{
+				cell.islandID = -1; //Ocean tiles doesn't have a island
+			}
+			else
+			{
+				land.Add(cell);
+			}
+		}
+
+		islands = new List<List<CellCenter>>();
+
+		for (int i = 0; i < land.Count; i++)
+		{
+			CellCenter currentCell = land[i];
+
+			//Is the current cell in any island already?
+			if (!islands.Any(x => x.Contains(currentCell)))
+			{
+				//If not, create a new island for it and add the current cell
+				List<CellCenter> currentIsland = new List<CellCenter>();
+				islands.Add(currentIsland);
+
+				currentIsland.Add(currentCell);
+				currentCell.islandID = islands.Count - 1;
+
+				//Create a queue with the current cell. We check its neighbors to see if they are not an ocean tile. If not, check if it was already added to the current island.
+				Queue<CellCenter> islandQueue = new Queue<CellCenter>();
+				islandQueue.Enqueue(currentCell);
+
+				while (islandQueue.Count > 0)
+				{
+					currentCell = islandQueue.Dequeue();
+
+					foreach (var neighbor in currentCell.neighborCells)
+					{
+						if (!neighbor.isOcean && !currentIsland.Contains(neighbor))
+						{
+							islandQueue.Enqueue(neighbor); //Add the neighbor to the queue so we can then check its neighbors, until we can't find any neightbor that is either a ocean or was not added to the current island
+							currentIsland.Add(neighbor);
+							neighbor.islandID = islands.Count - 1;
+						}
+					}
+				}
+			}
+		}
+
+		if (singleIsland)
+		{
+			minIslandSize = islands.Max(x => x.Count);
+		}
+
+		//Remove all islands that have a lower cell count than the minimum size
+		for (int i = 0; i < islands.Count; i++)
+		{
+			List<CellCenter> currentIsland = islands[i];
+
+			if (currentIsland.Count < minIslandSize)
+			{
+				foreach (var cell in currentIsland)
+				{
+					//We transform all cells in the islands we want to discard into ocean cells
+					cell.isWater = true;
+					cell.isOcean = true;
+					cell.islandID = -1;
+				}
+
+				//Remove the current island
+				islands.RemoveAt(i);
+				i--;
+			}
 		}
 	}
 
@@ -441,7 +529,7 @@ public class PolygonMap : MonoBehaviour
 		springsSeed = useCustomSeeds ? springsSeed : Random.Range(0, 10000);
 		Random.InitState(springsSeed);
 
-		while (rivers.Count < numberOfSprings)
+		while (springs.Count > 0 && rivers.Count < numberOfSprings)
 		{
 			int id = Random.Range(0, springs.Count);
 			rivers.Add(springs[id]);
@@ -533,26 +621,26 @@ public class PolygonMap : MonoBehaviour
 			cell.moisture = cell.isWater ? 1 : 1 - (waterDistance[cell.index] / maxDistance);
 		}
 
-		//Redistribute moisture values evenly
-		List<CellCenter> land = cells.Where(x => !x.isWater).ToList();
-		land.Sort((x, y) =>
-		{
-			if (x.moisture < y.moisture)
-				return -1;
+		////Redistribute moisture values evenly
+		//List<CellCenter> land = cells.Where(x => !x.isWater).ToList();
+		//land.Sort((x, y) =>
+		//{
+		//	if (x.moisture < y.moisture)
+		//		return -1;
 
-			if (x.moisture > y.moisture)
-				return 1;
+		//	if (x.moisture > y.moisture)
+		//		return 1;
 
-			return 0;
-		});
+		//	return 0;
+		//});
 
-		float minMoisture = 0;
-		float maxMoisture = 1;
+		//float minMoisture = 0;
+		//float maxMoisture = 1;
 
-		for (int i = 0; i < land.Count; i++)
-		{
-			land[i].moisture = minMoisture + (maxMoisture - minMoisture) * i / (land.Count - 1);
-		}
+		//for (int i = 0; i < land.Count; i++)
+		//{
+		//	land[i].moisture = minMoisture + (maxMoisture - minMoisture) * i / (land.Count - 1);
+		//}
 	}
 
 	private void AssignBiome()

@@ -663,8 +663,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 155.83333, y: 0}
-  m_SizeDelta: {x: 291.66666, y: 0}
+  m_AnchoredPosition: {x: 151.33333, y: 0}
+  m_SizeDelta: {x: 282.66666, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &712017686
 MonoBehaviour:
@@ -1080,7 +1080,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ea52fd75e0c583345a40758fb2044213, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  useCustomSeeds: 0
+  useCustomSeeds: 1
   seed: -730158218
   polygonCount: 1000
   size: {x: 2, y: 2}
@@ -1110,11 +1110,11 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  noiseSeed: 681
-  noiseSize: 2
-  octaves: 1
+  shape: {fileID: 11400000, guid: daf88783d578d4543915794eef8a549a, type: 2}
+  singleIsland: 1
+  minIslandSize: 0
   springsSeed: 5
-  numberOfSprings: 5
+  numberOfSprings: 25
   minSpringElevation: 0.3
   maxSpringElevation: 0.9
 --- !u!4 &1554614732
@@ -1148,7 +1148,7 @@ MonoBehaviour:
   rend: {fileID: 364495159}
   infoText: {fileID: 712017686}
   resolution: {x: 1024, y: 1024}
-  background: 5
+  background: 3
   overlays: 256
   selectedID: 0
   biomes:

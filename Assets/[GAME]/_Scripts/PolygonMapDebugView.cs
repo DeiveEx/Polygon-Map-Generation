@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
-using System;
 using TMPro;
 using System.Linq;
 
@@ -13,12 +12,13 @@ public class PolygonMapDebugView : MonoBehaviour
 		VoronoiCells,
 		Shape,
 		WaterAndLand,
+		Islands,
 		Elevation,
 		Moisture,
 		Biomes,
 	}
 
-	[Flags] //This attribute turns the enum into a bitmask, and Unity has a special inspactor for bitmasks. We use a bitmask so we can draw more modes at once. Since this is a int, we can have up to 32 values
+	[System.Flags] //This attribute turns the enum into a bitmask, and Unity has a special inspactor for bitmasks. We use a bitmask so we can draw more modes at once. Since this is a int, we can have up to 32 values
 	public enum Overlays
 	{
 		VoronoiEdges		= 1 << 0, //Bit shifts the bit value of "1" (something like 0001, but with 32 digits, since this is a int) 0 bit to the left
@@ -157,6 +157,9 @@ public class PolygonMapDebugView : MonoBehaviour
 			case ViewBG.WaterAndLand:
 				DrawWaterAndLand();
 				break;
+			case ViewBG.Islands:
+				DrawIslands();
+				break;
 			case ViewBG.Elevation:
 				DrawElevation();
 				break;
@@ -220,7 +223,8 @@ public class PolygonMapDebugView : MonoBehaviour
 		}
 		else
 		{
-			infoText.text = string.Empty;
+			infoText.text = "No cell selected" +
+				"";
 		}
 
 		//Create the texture and assign the texture using a Helper Compute Shader
@@ -285,7 +289,11 @@ public class PolygonMapDebugView : MonoBehaviour
 		info += "\n- " + string.Join("\n- ",
 			$"id: {c.index}",
 			$"elevation: {c.elevation}",
-			$"moisture: {c.moisture}"
+			$"moisture: {c.moisture}",
+			$"isCoast: {c.isCoast}",
+			$"isWater: {c.isWater}",
+			$"isOcean: {c.isOcean}",
+			$"isBorder: {c.isBorder}"
 		);
 
 		info += "\n\nEDGES:\n";
@@ -372,7 +380,7 @@ public class PolygonMapDebugView : MonoBehaviour
 			{
 				int currentCellID = cellIDs[x + y * resolution.y];
 				float value = currentCellID / (float)generator.cells.Count;
-				texColors[x, y] = new Color(value, value, value);
+				texColors[x, y] = Color.HSVToRGB(1, 0, value);
 			}
 		}
 	}
@@ -508,6 +516,34 @@ public class PolygonMapDebugView : MonoBehaviour
 		}
 	}
 
+	private void DrawIslands()
+	{
+		Dictionary<int, Color> islandColors = new Dictionary<int, Color>();
+
+		for (int i = 0; i < generator.islands.Count; i++)
+		{
+			islandColors.Add(generator.islands[i][0].islandID, Color.HSVToRGB((i * (360f / generator.islands.Count)) / 360f, Random.Range(.5f, 1), 1));
+		}
+
+		for (int x = 0; x < resolution.x; x++)
+		{
+			for (int y = 0; y < resolution.y; y++)
+			{
+				int currentCellID = cellIDs[x + y * resolution.y];
+				CellCenter c = generator.cells[currentCellID];
+
+				if(c.islandID < 0)
+				{
+					texColors[x, y] = Color.black;
+				}
+				else
+				{
+					texColors[x, y] = islandColors[c.islandID];
+				}
+			}
+		}
+	}
+
 	private void DrawCoast()
 	{
 		foreach (var corner in generator.corners)
@@ -581,7 +617,7 @@ public class PolygonMapDebugView : MonoBehaviour
 	private void DrawMoisture()
 	{
 		Color water = new Color(.1f, .1f, .5f);
-		Color wet = new Color(.4f, 1.0f, .4f);
+		Color wet = new Color(0.25f, .39f, .2f);
 		Color dry = new Color(.8f, .7f, .5f);
 
 		for (int x = 0; x < resolution.x; x++)

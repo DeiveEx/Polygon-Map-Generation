@@ -10,7 +10,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c35b20325bd098e48b8e5545e3da65e7, type: 3}
-  m_Name: Noise
+  m_Name: Noise Shape
   m_EditorClassIdentifier: 
-  noiseSize: 1
+  variation: 1
+  noiseSize: 10
   octaves: 4

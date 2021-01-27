@@ -9,7 +9,8 @@ public class MapPoint
 	public bool isBorder;
 	public bool isWater;
 	public bool isOcean;
-	public bool isCoast;
+	public bool isCoast; //Coasts can be water too
 	public float elevation; //Normalized
 	public float moisture; //Normalized
+	public int islandID;
 }
