@@ -13,5 +13,5 @@ MonoBehaviour:
   m_Name: Noise Shape
   m_EditorClassIdentifier: 
   variation: 1
-  noiseSize: 10
+  noiseSize: 2
   octaves: 4
