@@ -10,6 +10,6 @@ public class MapPoint
 	public bool isWater;
 	public bool isOcean;
 	public bool isCoast;
-	public float elevation;
-	public float moisture;
+	public float elevation; //Normalized
+	public float moisture; //Normalized
 }

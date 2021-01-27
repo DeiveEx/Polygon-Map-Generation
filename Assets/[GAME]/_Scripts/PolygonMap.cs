@@ -5,6 +5,28 @@ using NaughtyAttributes;
 using csDelaunay; //The Voronoi Library
 using System.Linq;
 
+public enum Biomes
+{
+	Ocean,
+	Beach,
+	Lake,
+	Ice,
+	Marsh,
+	Snow,
+	Tundra,
+	Bare,
+	Scorched,
+	Taiga,
+	Shrubland,
+	Temperate_Desert,
+	Temperate_Rain_Forest,
+	Temperate_Deciduous_Forest,
+	Grassland,
+	Tropical_Rain_Forest,
+	Tropical_Seasonal_Forest,
+	Subtropical_Desert
+}
+
 public class PolygonMap : MonoBehaviour
 {
 	//Properties
@@ -25,6 +47,8 @@ public class PolygonMap : MonoBehaviour
 	[Header("Rivers")]
 	public int springsSeed;
 	public int numberOfSprings = 5;
+	[Range(0, 1)] public float minSpringElevation = 0.3f;
+	[Range(0, 1)] public float maxSpringElevation = 0.9f;
 
 	//Graphs. Here are the info necessary to build both the Voronoi Graph than the Delaunay triangulation Graph
 	public List<CellCenter> cells = new List<CellCenter>(); //The center of each cell makes up a corner for the Delaunay triangles
@@ -69,6 +93,8 @@ public class PolygonMap : MonoBehaviour
 		AssignOceanCoastAndLand();
 		AssignElevations(); //For this case, we are making that the farthest from the coast, the higher the elevation
 		AddRivers();
+		AssignMoisture();
+		AssignBiome();
 
 		//Execute an event saying we finished our generation
 		onMapGenerated?.Invoke();
@@ -415,10 +441,6 @@ public class PolygonMap : MonoBehaviour
 	{
 		List<CellCorner> springs = new List<CellCorner>();
 
-		//Define the min and max elevations from where springs for rivers can start
-		float minSpringElevation = 0.3f;
-		float maxSpringElevation = 0.9f;
-
 		//Get all corners that can possibly be a spring.
 		for (int i = 0; i < corners.Count; i++)
 		{
@@ -460,6 +482,160 @@ public class PolygonMap : MonoBehaviour
 			}
 		}
 	}
+
+	private void AssignMoisture()
+	{
+		HashSet<CellCenter> moistureSeeds = new HashSet<CellCenter>(); //we use a HashSet to guarantee we won't have duplicate values
+
+		foreach (var edge in edges)
+		{
+			//Find all riverbanks (regions adjacent to rivers)
+			if (edge.waterVolume > 0)
+			{
+				moistureSeeds.Add(edge.d0);
+				moistureSeeds.Add(edge.d1);
+			}
+
+			//Find all lakeshores (regions adjacent to lakes)
+			if ((edge.d0.isWater && !edge.d0.isOcean) || (edge.d1.isWater && !edge.d1.isOcean))
+			{
+				moistureSeeds.Add(edge.d0);
+				moistureSeeds.Add(edge.d1);
+			}
+		}
+
+		//Copy the hashset values to a queue
+		Queue<CellCenter> queue = new Queue<CellCenter>(moistureSeeds);
+		Dictionary<int, float> waterDistance = new Dictionary<int, float>();
+
+		//Set the distance of each cell in the queue to 0, since they're the closest to a water source. Any other cell gets -1
+		foreach (var cell in cells)
+		{
+			if (queue.Contains(cell))
+			{
+				waterDistance.Add(cell.index, 0);
+			}
+			else
+			{
+				waterDistance.Add(cell.index, -1);
+			}
+		}
+
+		float maxDistance = 1;
+
+		while (queue.Count > 0)
+		{
+			CellCenter currentCell = queue.Dequeue();
+
+			foreach (var neighbor in currentCell.neighborCells)
+			{
+				if (!neighbor.isWater && waterDistance[neighbor.index] < 0)
+				{
+					float newDistance = waterDistance[currentCell.index] + 1;
+					waterDistance[neighbor.index] = newDistance;
+
+					if (newDistance > maxDistance)
+						maxDistance = newDistance;
+
+					queue.Enqueue(neighbor);
+				}
+			}
+		}
+
+		//Normalize the moisture values
+		foreach (var cell in cells)
+		{
+			cell.moisture = cell.isWater ? 1 : 1 - (waterDistance[cell.index] / maxDistance);
+		}
+
+		//Redistribute moisture values evenly
+		List<CellCenter> land = cells.Where(x => !x.isWater).ToList();
+		land.Sort((x, y) =>
+		{
+			if (x.moisture < y.moisture)
+				return -1;
+
+			if (x.moisture > y.moisture)
+				return 1;
+
+			return 0;
+		});
+
+		float minMoisture = 0;
+		float maxMoisture = 1;
+
+		for (int i = 0; i < land.Count; i++)
+		{
+			land[i].moisture = minMoisture + (maxMoisture - minMoisture) * i / (land.Count - 1);
+		}
+	}
+
+	private void AssignBiome()
+	{
+		foreach (var cell in cells)
+		{
+			if (cell.isOcean)
+			{
+				cell.biome = Biomes.Ocean;
+			}
+			else if (cell.isWater)
+			{
+				if (cell.elevation < .1f)
+					cell.biome = Biomes.Marsh;
+				else if (cell.elevation > .8f)
+					cell.biome = Biomes.Ice;
+				else
+					cell.biome = Biomes.Lake;
+			}
+			else if (cell.isCoast)
+			{
+				cell.biome = Biomes.Beach;
+			}
+			else if (cell.elevation > .8f)
+			{
+				if (cell.moisture > .5f)
+					cell.biome = Biomes.Snow;
+				else if (cell.moisture > .33)
+					cell.biome = Biomes.Tundra;
+				else if (cell.moisture > .16)
+					cell.biome = Biomes.Bare;
+				else
+					cell.biome = Biomes.Scorched;
+			}
+			else if (cell.elevation > .6)
+			{
+				if (cell.moisture > .66)
+					cell.biome = Biomes.Taiga;
+				else if (cell.moisture > .33)
+					cell.biome = Biomes.Shrubland;
+				else
+					cell.biome = Biomes.Temperate_Desert;
+			}
+			else if (cell.elevation > .3)
+			{
+				if (cell.moisture > .83)
+					cell.biome = Biomes.Temperate_Rain_Forest;
+				else if (cell.moisture > .5)
+					cell.biome = Biomes.Temperate_Deciduous_Forest;
+				else if (cell.moisture > .16)
+					cell.biome = Biomes.Grassland;
+				else
+					cell.biome = Biomes.Temperate_Desert;
+			}
+			else
+			{
+				if (cell.moisture > .66)
+					cell.biome = Biomes.Tropical_Rain_Forest;
+				else if (cell.moisture > .33)
+					cell.biome = Biomes.Tropical_Seasonal_Forest;
+				else if (cell.moisture > .16)
+					cell.biome = Biomes.Grassland;
+				else
+					cell.biome = Biomes.Subtropical_Desert;
+			}
+		}
+	}
+
 	#endregion
 
 	private void OnValidate()

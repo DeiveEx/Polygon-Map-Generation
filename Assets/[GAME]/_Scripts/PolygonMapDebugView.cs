@@ -14,6 +14,8 @@ public class PolygonMapDebugView : MonoBehaviour
 		Noise,
 		WaterAndLand,
 		Elevation,
+		Moisture,
+		Biomes,
 	}
 
 	[Flags] //This attribute turns the enum into a bitmask, and Unity has a special inspactor for bitmasks. We use a bitmask so we can draw more modes at once. Since this is a int, we can have up to 32 values
@@ -39,11 +41,14 @@ public class PolygonMapDebugView : MonoBehaviour
 	public ViewBG background;
 	public Overlays overlays;
 	public int selectedID = -1;
+	public BiomeColor[] biomes;
+
 
 	private Color[,] texColors;
 	private RenderTexture rt;
 	private int buildTextureKernelIndex;
 	private int findClosestCellKernelIndex;
+	private int[] cellIDs;
 
 	private const int POINT_SIZE = 5;
 
@@ -56,6 +61,13 @@ public class PolygonMapDebugView : MonoBehaviour
 	private struct CellData
 	{
 		public Vector2Int position;
+	}
+
+	[System.Serializable]
+	public class BiomeColor
+	{
+		public Biomes biome;
+		public Color color;
 	}
 
 	private void Awake()
@@ -99,15 +111,18 @@ public class PolygonMapDebugView : MonoBehaviour
 	{
 		if ((overlays & Overlays.Selected) != 0 && Input.GetMouseButtonDown(0) && RectTransformUtility.RectangleContainsScreenPoint(rend.rectTransform, Input.mousePosition))
 		{
-			Vector2 transformedPos = (Vector2)Input.mousePosition - rend.rectTransform.anchoredPosition;
-			transformedPos = transformedPos / rend.rectTransform.rect.size;
-			transformedPos = transformedPos * resolution;
+			Vector2 transformedPos = Vector2.zero;
 
-			int[] cellIDs = GetClosestCenterForPixels();
+			//When using Canvas with Screen Space Overlay, Camera should be Null
+			if (RectTransformUtility.ScreenPointToLocalPointInRectangle(rend.rectTransform, Input.mousePosition, null, out transformedPos))
+			{
+				transformedPos = (transformedPos / rend.rectTransform.rect.width) + (Vector2.one * .5f);
+				transformedPos = transformedPos * resolution;
 
-			selectedID = cellIDs[(int)transformedPos.x + (int)transformedPos.y * resolution.y];
+				selectedID = cellIDs[(int)transformedPos.x + (int)transformedPos.y * resolution.y];
 
-			GenerateDebugTexture();
+				GenerateDebugTexture();
+			}
 		}
 	}
 
@@ -125,6 +140,9 @@ public class PolygonMapDebugView : MonoBehaviour
 
 		texColors = new Color[resolution.x, resolution.y];
 
+		//Populate the cellIDs array with the ID of the closest cell for each pixel
+		cellIDs = GetClosestCenterForPixels();
+
 		//Draw the debug info into the texture. The order here defines the draw order
 
 		//BACKGROUND
@@ -141,6 +159,12 @@ public class PolygonMapDebugView : MonoBehaviour
 				break;
 			case ViewBG.Elevation:
 				DrawElevation();
+				break;
+			case ViewBG.Moisture:
+				DrawMoisture();
+				break;
+			case ViewBG.Biomes:
+				DrawBiomes();
 				break;
 			default:
 				break;
@@ -174,8 +198,25 @@ public class PolygonMapDebugView : MonoBehaviour
 		//We want these to be over everything
 		if ((overlays & Overlays.Selected) != 0)
 		{
-			DrawNeighboors();
+			DrawSelected();
 			infoText.text = GetInfoFromCell();
+
+			//Recursively rebuild the layout because Unity sucks on doing that automatically
+			RectTransform t = infoText.GetComponent<RectTransform>();
+
+			do
+			{
+				LayoutRebuilder.MarkLayoutForRebuild(t);
+				if(t.parent != null)
+				{
+					t = t.parent.GetComponent<RectTransform>();
+				}
+				else
+				{
+					t = null;
+				}
+			}
+			while (t != null);
 		}
 		else
 		{
@@ -243,7 +284,8 @@ public class PolygonMapDebugView : MonoBehaviour
 
 		info += "\n- " + string.Join("\n- ",
 			$"id: {c.index}",
-			$"elevation: {c.elevation}"
+			$"elevation: {c.elevation}",
+			$"moisture: {c.moisture}"
 		);
 
 		info += "\n\nEDGES:\n";
@@ -251,8 +293,7 @@ public class PolygonMapDebugView : MonoBehaviour
 		foreach (var edge in c.borderEdges)
 		{
 			info += "\n- " + string.Join("\n",
-				$"id: {edge.index}",
-				$"V: {edge.v0.index}; {edge.v1.index}\tD: {edge.d0.index}; {edge.d1.index}"
+				$"id: {edge.index}"
 			);
 		}
 
@@ -325,8 +366,6 @@ public class PolygonMapDebugView : MonoBehaviour
 	#region Draw Views
 	private void DrawVoronoiCells()
 	{
-		int[] cellIDs = GetClosestCenterForPixels();
-
 		for (int x = 0; x < resolution.x; x++)
 		{
 			for (int y = 0; y < resolution.y; y++)
@@ -370,7 +409,7 @@ public class PolygonMapDebugView : MonoBehaviour
 		}
 	}
 
-	private void DrawNeighboors()
+	private void DrawSelected()
 	{
 		CellCenter c = generator.cells[selectedID];
 		DrawGraphPoint(c, Color.green, POINT_SIZE * 3, 2);
@@ -394,8 +433,6 @@ public class PolygonMapDebugView : MonoBehaviour
 
 	private void DrawMapBorders()
 	{
-		int[] cellIDs = GetClosestCenterForPixels();
-
 		for (int x = 0; x < resolution.x; x++)
 		{
 			for (int y = 0; y < resolution.y; y++)
@@ -454,8 +491,6 @@ public class PolygonMapDebugView : MonoBehaviour
 		Color land = new Color(.7f, .7f, .5f);
 		Color coast = new Color(.5f, .5f, .3f);
 
-		int[] cellIDs = GetClosestCenterForPixels();
-
 		for (int x = 0; x < resolution.x; x++)
 		{
 			for (int y = 0; y < resolution.y; y++)
@@ -502,7 +537,6 @@ public class PolygonMapDebugView : MonoBehaviour
 
 	private void DrawElevation()
 	{
-		int[] cellIDs = GetClosestCenterForPixels();
 		Color low = Color.black;
 		Color high = Color.white;
 		Color water = Color.blue * 0.5f;
@@ -556,6 +590,54 @@ public class PolygonMapDebugView : MonoBehaviour
 			if(edge.waterVolume > 0)
 			{
 				DrawGraphEdge(edge, Color.blue, edge.waterVolume, true);
+			}
+		}
+	}
+
+	private void DrawMoisture()
+	{
+		Color water = new Color(0, 0, 1);
+		Color wet = new Color(.4f, 1.0f, .4f);
+		Color dry = new Color(.8f, .7f, .5f);
+
+		for (int x = 0; x < resolution.x; x++)
+		{
+			for (int y = 0; y < resolution.y; y++)
+			{
+				int currentCellID = cellIDs[x + y * resolution.y];
+				CellCenter c = generator.cells[currentCellID];
+
+				if (c.isWater)
+				{
+					texColors[x, y] = water;
+				}
+				else
+				{
+					texColors[x, y] = Color.Lerp(dry, wet, c.moisture);
+				}
+			}
+		}
+	}
+
+	private void DrawBiomes()
+	{
+		for (int x = 0; x < resolution.x; x++)
+		{
+			for (int y = 0; y < resolution.y; y++)
+			{
+				int currentCellID = cellIDs[x + y * resolution.y];
+				CellCenter c = generator.cells[currentCellID];
+
+				BiomeColor biome = biomes.FirstOrDefault(b => b.biome == c.biome);
+
+				if(biome != null)
+				{
+					texColors[x, y] = biome.color;
+				}
+				else
+				{
+					texColors[x, y] = Color.black;
+				}
 			}
 		}
 	}
