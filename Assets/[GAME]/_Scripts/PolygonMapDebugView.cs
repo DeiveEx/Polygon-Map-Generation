@@ -11,7 +11,7 @@ public class PolygonMapDebugView : MonoBehaviour
 	public enum ViewBG
 	{
 		VoronoiCells,
-		Noise,
+		Shape,
 		WaterAndLand,
 		Elevation,
 		Moisture,
@@ -151,8 +151,8 @@ public class PolygonMapDebugView : MonoBehaviour
 			case ViewBG.VoronoiCells:
 				DrawVoronoiCells();
 				break;
-			case ViewBG.Noise:
-				DrawNoise();
+			case ViewBG.Shape:
+				DrawShape();
 				break;
 			case ViewBG.WaterAndLand:
 				DrawWaterAndLand();
@@ -457,26 +457,13 @@ public class PolygonMapDebugView : MonoBehaviour
 		}
 	}
 
-	private void DrawNoise()
+	private void DrawShape()
 	{
 		for (int x = 0; x < resolution.x; x++)
 		{
 			for (int y = 0; y < resolution.y; y++)
 			{
-				Vector2 normalizedPos = new Vector2() {
-					x = ((x / (float)resolution.x) - 0.5f) * 2,
-					y = ((y / (float)resolution.y) - 0.5f) * 2
-				};
-
-				Vector2 perlinPos = new Vector2() {
-					x = (normalizedPos.x * 0.5f + 0.5f) * generator.size.x,
-					y = (normalizedPos.y * 0.5f + 0.5f) * generator.size.y
-				};
-
-				float value = BetterPerlinNoise.SamplePoint(perlinPos.x * generator.noiseSize + generator.noiseSeed, perlinPos.y * generator.noiseSize + generator.noiseSeed, generator.octaves);
-				float value2 = 0.3f + 0.3f * normalizedPos.magnitude * normalizedPos.magnitude; //Same formula used in the generation
-
-				texColors[x, y] = value > value2 ? Color.gray : Color.black;
+				texColors[x, y] = generator.shape.IsPointInsideShape(new Vector2(x, y), resolution, generator.seed) ? Color.gray : Color.black;
 			}
 		}
 	}

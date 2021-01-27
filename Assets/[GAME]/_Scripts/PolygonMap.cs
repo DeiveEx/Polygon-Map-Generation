@@ -46,11 +46,7 @@ public class PolygonMap : MonoBehaviour
     public int relaxation = 0;
 	public Shape islandShape;
 	public AnimationCurve elevationCurve = AnimationCurve.Linear(0, 0, 1, 1);
-
-	[Header("Noise")]
-	public int noiseSeed;
-    public float noiseSize = 1;
-    [Range(1, 4)] public int octaves = 4;
+	public IslandShape shape;
 
 	[Header("Rivers")]
 	public int springsSeed;
@@ -237,12 +233,10 @@ public class PolygonMap : MonoBehaviour
 
 	private void AssignWater()
 	{
-		noiseSeed = useCustomSeeds ? noiseSeed : Random.Range(0, 1000); //We use a second, lower seed for the perlin noise because numbers too big can cause problems
-
 		//Define if a corner is land or not based on some shape function
 		foreach (var corner in corners)
 		{
-			corner.isWater = !IsPointInsideShape(corner.position);
+			corner.isWater = !shape.IsPointInsideShape(corner.position, size, seed);
 		}
 	}
 
@@ -627,51 +621,6 @@ public class PolygonMap : MonoBehaviour
 		}
 	}
 
-	#endregion
-
-	#region Shape Functions
-	private bool IsPointInsideShape(Vector2 point)
-	{
-		switch (islandShape)
-		{
-			case Shape.Fill:
-				return true;
-			case Shape.Circle:
-				return Shape_Circle(point);
-			case Shape.Noise:
-				return Shape_PerlinNoise(point);
-			default:
-				return false;
-		}
-	}
-
-	private bool Shape_PerlinNoise(Vector2 position)
-	{
-		//Normalize the position to a -1 to 1 value
-		Vector2 normalizedPosition = new Vector2() {
-			x = ((position.x / size.x) - 0.5f) * 2,
-			y = ((position.y / size.y) - 0.5f) * 2
-		};
-
-		float value = BetterPerlinNoise.SamplePoint(position.x * noiseSize + noiseSeed, position.y * noiseSize + noiseSeed, octaves); //The perlin noise function isn't random, so we need to add a "seed" to offset the values
-
-		//We check if the value of the perlin is greater than the border value
-		return value > 0.3f + 0.3f * normalizedPosition.magnitude * normalizedPosition.magnitude; //I don't really understand how this formula works, I just see that 0.3f is the lowest possible value and that it makes a radial patterm since it uses the magnetude of the point
-	}
-
-	private bool Shape_Circle(Vector2 position)
-	{
-		//Normalize the position to a -1 to 1 value
-		Vector2 normalizedPosition = new Vector2() {
-			x = ((position.x / size.x) - 0.5f) * 2,
-			y = ((position.y / size.y) - 0.5f) * 2
-		};
-
-		float value = Vector2.Distance(Vector2.zero, normalizedPosition);
-
-		//We check if the value of the perlin is greater than the border value
-		return value < .9f;
-	}
 	#endregion
 
 	private void OnValidate()

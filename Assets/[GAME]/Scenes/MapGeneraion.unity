@@ -1082,9 +1082,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   useCustomSeeds: 0
   seed: -730158218
-  polygonCount: 500
+  polygonCount: 1000
   size: {x: 2, y: 2}
   relaxation: 4
+  islandShape: 2
   elevationCurve:
     serializedVersion: 2
     m_Curve:
@@ -1110,7 +1111,7 @@ MonoBehaviour:
     m_PostInfinity: 2
     m_RotationOrder: 4
   noiseSeed: 681
-  noiseSize: 3
+  noiseSize: 2
   octaves: 1
   springsSeed: 5
   numberOfSprings: 5
@@ -1147,7 +1148,7 @@ MonoBehaviour:
   rend: {fileID: 364495159}
   infoText: {fileID: 712017686}
   resolution: {x: 1024, y: 1024}
-  background: 1
+  background: 5
   overlays: 256
   selectedID: 0
   biomes:
