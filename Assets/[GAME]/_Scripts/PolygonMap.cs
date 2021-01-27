@@ -5,6 +5,13 @@ using NaughtyAttributes;
 using csDelaunay; //The Voronoi Library
 using System.Linq;
 
+public enum Shape
+{
+	Fill,
+	Circle,
+	Noise
+}
+
 public enum Biomes
 {
 	Ocean,
@@ -37,6 +44,7 @@ public class PolygonMap : MonoBehaviour
 	public int polygonCount = 200; //The number of polygons/sites we want
 	public Vector2 size;
     public int relaxation = 0;
+	public Shape islandShape;
 	public AnimationCurve elevationCurve = AnimationCurve.Linear(0, 0, 1, 1);
 
 	[Header("Noise")]
@@ -231,27 +239,10 @@ public class PolygonMap : MonoBehaviour
 	{
 		noiseSeed = useCustomSeeds ? noiseSeed : Random.Range(0, 1000); //We use a second, lower seed for the perlin noise because numbers too big can cause problems
 
-		//Define a local helper function to determine if a corner is a land or not
-		//We use a perlin noise to determine the shape of the island, but anything can be used. We also use a radius from the center of the map, so the island is always surrounded by water
-		bool IsLand(Vector2 position)
-		{
-			//Normalize the position to a -1 to 1 value
-			Vector2 normalizedPosition = new Vector2() {
-				x = ((position.x / size.x) - 0.5f) * 2,
-				y = ((position.y / size.y) - 0.5f) * 2
-			};
-
-			float value = BetterPerlinNoise.SamplePoint(position.x * noiseSize + noiseSeed, position.y * noiseSize + noiseSeed, octaves); //The perlin noise function isn't random, so we need to add a "seed" to offset the values
-
-			//We check if the value of the perlin is greater than the border value
-			return value > 0.3f + 0.3f * normalizedPosition.magnitude * normalizedPosition.magnitude; //I don't really understand how this formula works, I just see that 0.3f is the lowest possible value and that it makes a radial patterm since it uses the magnetude of the point
-		}
-
-		//Define if a corner is land or not based on some shape function (defined above)
-
+		//Define if a corner is land or not based on some shape function
 		foreach (var corner in corners)
 		{
-			corner.isWater = !IsLand(corner.position);
+			corner.isWater = !IsPointInsideShape(corner.position);
 		}
 	}
 
@@ -636,6 +627,51 @@ public class PolygonMap : MonoBehaviour
 		}
 	}
 
+	#endregion
+
+	#region Shape Functions
+	private bool IsPointInsideShape(Vector2 point)
+	{
+		switch (islandShape)
+		{
+			case Shape.Fill:
+				return true;
+			case Shape.Circle:
+				return Shape_Circle(point);
+			case Shape.Noise:
+				return Shape_PerlinNoise(point);
+			default:
+				return false;
+		}
+	}
+
+	private bool Shape_PerlinNoise(Vector2 position)
+	{
+		//Normalize the position to a -1 to 1 value
+		Vector2 normalizedPosition = new Vector2() {
+			x = ((position.x / size.x) - 0.5f) * 2,
+			y = ((position.y / size.y) - 0.5f) * 2
+		};
+
+		float value = BetterPerlinNoise.SamplePoint(position.x * noiseSize + noiseSeed, position.y * noiseSize + noiseSeed, octaves); //The perlin noise function isn't random, so we need to add a "seed" to offset the values
+
+		//We check if the value of the perlin is greater than the border value
+		return value > 0.3f + 0.3f * normalizedPosition.magnitude * normalizedPosition.magnitude; //I don't really understand how this formula works, I just see that 0.3f is the lowest possible value and that it makes a radial patterm since it uses the magnetude of the point
+	}
+
+	private bool Shape_Circle(Vector2 position)
+	{
+		//Normalize the position to a -1 to 1 value
+		Vector2 normalizedPosition = new Vector2() {
+			x = ((position.x / size.x) - 0.5f) * 2,
+			y = ((position.y / size.y) - 0.5f) * 2
+		};
+
+		float value = Vector2.Distance(Vector2.zero, normalizedPosition);
+
+		//We check if the value of the perlin is greater than the border value
+		return value < .9f;
+	}
 	#endregion
 
 	private void OnValidate()
