@@ -476,10 +476,7 @@ public class PolygonMapDebugView : MonoBehaviour
 				float value = BetterPerlinNoise.SamplePoint(perlinPos.x * generator.noiseSize + generator.noiseSeed, perlinPos.y * generator.noiseSize + generator.noiseSeed, generator.octaves);
 				float value2 = 0.3f + 0.3f * normalizedPos.magnitude * normalizedPos.magnitude; //Same formula used in the generation
 
-
 				texColors[x, y] = value > value2 ? Color.gray : Color.black;
-				texColors[x, y] = Color.white * value;
-				texColors[x, y].a = 1;
 			}
 		}
 	}
@@ -596,7 +593,7 @@ public class PolygonMapDebugView : MonoBehaviour
 
 	private void DrawMoisture()
 	{
-		Color water = new Color(0, 0, 1);
+		Color water = new Color(.1f, .1f, .5f);
 		Color wet = new Color(.4f, 1.0f, .4f);
 		Color dry = new Color(.8f, .7f, .5f);
 
